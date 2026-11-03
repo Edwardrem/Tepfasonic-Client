@@ -34,6 +34,34 @@ public final class SSHHost {
     public var agentPermissionRaw: String = AgentPermissionMode.ask.rawValue
     /// Command patterns that run without asking in `.allowlist` mode (`*` wildcards, or `/regex/`).
     public var agentAllowlist: [String] = []
+    /// The bastion this host is reached through. Chains as deep as the jump host's own jump host.
+    public var jumpHost: SSHHost?
+    /// Hosts whose `jumpHost` is this one.
+    @Relationship(deleteRule: .nullify, inverse: \SSHHost.jumpHost)
+    public var hostsJumpingThrough: [SSHHost] = []
+    /// Groups that use this host as their default jump host.
+    @Relationship(deleteRule: .nullify, inverse: \HostGroup.defaultJumpHost)
+    public var groupsJumpingThrough: [HostGroup] = []
+    /// When true and `jumpHost` is nil, the group's default jump host applies.
+    public var inheritsGroupJumpHost: Bool = true
+    /// Raw `ProxySettings.Kind` (`http` or `socks5`); nil means no proxy of its own.
+    public var proxyKindRaw: String?
+    public var proxyHost: String = ""
+    public var proxyPort: Int = 0
+    public var proxyUsername: String = ""
+    /// When true and no proxy is set here, the group's proxy applies.
+    public var inheritsGroupProxy: Bool = true
+    /// Terminal colour scheme id (`builtin:dracula` or a theme record UUID). Nil inherits the group, then the global setting.
+    public var themeID: String?
+    public var fontName: String?
+    public var fontSize: Double?
+    /// Hex colour tinted over the terminal background as a stronger warning (e.g. production).
+    public var backgroundTint: String?
+    /// Large faint text drawn over the terminal, such as `PROD`.
+    public var watermark: String?
+    /// Saved forwarding rules for this host.
+    @Relationship(deleteRule: .cascade, inverse: \PortForwardRule.host)
+    public var portForwards: [PortForwardRule] = []
 
     public init(
         uuid: UUID = UUID(),
@@ -80,6 +108,29 @@ public final class SSHHost {
     public var agentPermission: AgentPermissionMode {
         get { AgentPermissionMode(rawValue: agentPermissionRaw) ?? .ask }
         set { agentPermissionRaw = newValue.rawValue }
+    }
+
+    /// The proxy configured on this host, without the password (that lives in the Keychain).
+    public var ownProxy: HostProxyConfiguration? {
+        guard let proxyKindRaw, !proxyHost.isEmpty, proxyPort > 0 else { return nil }
+        return HostProxyConfiguration(kind: proxyKindRaw, host: proxyHost, port: proxyPort, username: proxyUsername.isEmpty ? nil : proxyUsername, ownerID: uuid)
+    }
+
+    /// The proxy that applies: the host's own, else the group's when inherited.
+    public var effectiveProxy: HostProxyConfiguration? {
+        ownProxy ?? (inheritsGroupProxy ? group?.proxy : nil)
+    }
+
+    /// The jump host that applies: the host's own, else the group's when inherited.
+    public var effectiveJumpHost: SSHHost? {
+        if let jumpHost { return jumpHost }
+        guard inheritsGroupJumpHost, let group, let candidate = group.defaultJumpHost, candidate.uuid != uuid else { return nil }
+        return candidate
+    }
+
+    /// The identity that applies: the host's own, else the group's default.
+    public var effectiveIdentity: Identity? {
+        identity ?? group?.defaultIdentity
     }
 
     /// `user@host` with the port appended when it is not the default 22.

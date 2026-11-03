@@ -17,10 +17,9 @@ public struct TepfaDocument: Codable, Sendable, Equatable {
     public var snippetFolders: [SnippetFolderRecord] = []
     public var snippets: [SnippetRecord] = []
     public var knownHosts: [KnownHostRecord] = []
-    /// Reserved for build step 8.
     public var portForwards: [PortForwardRecord] = []
-    /// Reserved for theming.
     public var themes: [ThemeRecord] = []
+    public var serialProfiles: [SerialProfileRecord] = []
     /// Passwords, keys and passphrases. Only ever present in encrypted files.
     public var secrets: SecretsRecord?
 
@@ -30,7 +29,7 @@ public struct TepfaDocument: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case format, schemaVersion, exportedAt, appVersion, groups, hosts, identities, snippetFolders, snippets, knownHosts, portForwards, themes, secrets
+        case format, schemaVersion, exportedAt, appVersion, groups, hosts, identities, snippetFolders, snippets, knownHosts, portForwards, themes, serialProfiles, secrets
     }
 
     public init(from decoder: any Decoder) throws {
@@ -47,11 +46,12 @@ public struct TepfaDocument: Codable, Sendable, Equatable {
         knownHosts = try container.decodeIfPresent([KnownHostRecord].self, forKey: .knownHosts) ?? []
         portForwards = try container.decodeIfPresent([PortForwardRecord].self, forKey: .portForwards) ?? []
         themes = try container.decodeIfPresent([ThemeRecord].self, forKey: .themes) ?? []
+        serialProfiles = try container.decodeIfPresent([SerialProfileRecord].self, forKey: .serialProfiles) ?? []
         secrets = try container.decodeIfPresent(SecretsRecord.self, forKey: .secrets)
     }
 
     public var isEmpty: Bool {
-        groups.isEmpty && hosts.isEmpty && identities.isEmpty && snippetFolders.isEmpty && snippets.isEmpty && knownHosts.isEmpty && portForwards.isEmpty && themes.isEmpty
+        groups.isEmpty && hosts.isEmpty && identities.isEmpty && snippetFolders.isEmpty && snippets.isEmpty && knownHosts.isEmpty && portForwards.isEmpty && themes.isEmpty && serialProfiles.isEmpty
     }
 
     public struct GroupRecord: Codable, Sendable, Equatable, Identifiable {
@@ -59,12 +59,40 @@ public struct TepfaDocument: Codable, Sendable, Equatable {
         public var name: String
         public var sortOrder: Int
         public var colorLabel: String?
+        /// Group defaults (section 6 and theming). Optional so older files decode.
+        public var defaultIdentityID: UUID?
+        public var defaultJumpHostID: UUID?
+        public var proxy: ProxyRecord?
+        public var themeID: String?
+        public var fontName: String?
+        public var fontSize: Double?
 
-        public init(id: UUID, name: String, sortOrder: Int = 0, colorLabel: String? = nil) {
+        public init(id: UUID, name: String, sortOrder: Int = 0, colorLabel: String? = nil, defaultIdentityID: UUID? = nil, defaultJumpHostID: UUID? = nil, proxy: ProxyRecord? = nil, themeID: String? = nil, fontName: String? = nil, fontSize: Double? = nil) {
             self.id = id
             self.name = name
             self.sortOrder = sortOrder
             self.colorLabel = colorLabel
+            self.defaultIdentityID = defaultIdentityID
+            self.defaultJumpHostID = defaultJumpHostID
+            self.proxy = proxy
+            self.themeID = themeID
+            self.fontName = fontName
+            self.fontSize = fontSize
+        }
+    }
+
+    /// A proxy on a host or group. The password, when exported, travels in `secrets`.
+    public struct ProxyRecord: Codable, Sendable, Equatable {
+        public var kind: String
+        public var host: String
+        public var port: Int
+        public var username: String?
+
+        public init(kind: String, host: String, port: Int, username: String? = nil) {
+            self.kind = kind
+            self.host = host
+            self.port = port
+            self.username = username
         }
     }
 
@@ -87,12 +115,24 @@ public struct TepfaDocument: Codable, Sendable, Equatable {
         /// Agent guardrails (build step 7). Optional so files written before they existed still decode.
         public var agentPermission: String?
         public var agentAllowlist: [String]?
+        /// Jump host, proxy and theming (later steps). Optional for the same reason.
+        public var jumpHostID: UUID?
+        public var inheritsGroupJumpHost: Bool?
+        public var proxy: ProxyRecord?
+        public var inheritsGroupProxy: Bool?
+        public var themeID: String?
+        public var fontName: String?
+        public var fontSize: Double?
+        public var backgroundTint: String?
+        public var watermark: String?
 
         public init(
             id: UUID, name: String, hostname: String, port: Int = 22, username: String, authMethod: String = AuthMethod.password.rawValue,
             tags: [String] = [], notes: String = "", sortOrder: Int = 0, colorLabel: String? = nil, autoReconnect: Bool = true,
             groupID: UUID? = nil, identityID: UUID? = nil, defaultSnippetID: UUID? = nil, shellIntegration: String = ShellIntegrationMode.automatic.rawValue,
-            agentPermission: String? = nil, agentAllowlist: [String]? = nil
+            agentPermission: String? = nil, agentAllowlist: [String]? = nil,
+            jumpHostID: UUID? = nil, inheritsGroupJumpHost: Bool? = nil, proxy: ProxyRecord? = nil, inheritsGroupProxy: Bool? = nil,
+            themeID: String? = nil, fontName: String? = nil, fontSize: Double? = nil, backgroundTint: String? = nil, watermark: String? = nil
         ) {
             self.id = id
             self.name = name
@@ -111,6 +151,15 @@ public struct TepfaDocument: Codable, Sendable, Equatable {
             self.shellIntegration = shellIntegration
             self.agentPermission = agentPermission
             self.agentAllowlist = agentAllowlist
+            self.jumpHostID = jumpHostID
+            self.inheritsGroupJumpHost = inheritsGroupJumpHost
+            self.proxy = proxy
+            self.inheritsGroupProxy = inheritsGroupProxy
+            self.themeID = themeID
+            self.fontName = fontName
+            self.fontSize = fontSize
+            self.backgroundTint = backgroundTint
+            self.watermark = watermark
         }
     }
 
@@ -199,8 +248,10 @@ public struct TepfaDocument: Codable, Sendable, Equatable {
         public var targetHost: String
         public var targetPort: Int
         public var autoStart: Bool
+        public var name: String?
+        public var sortOrder: Int?
 
-        public init(id: UUID, hostID: UUID, kind: String, bindAddress: String = "127.0.0.1", bindPort: Int, targetHost: String = "", targetPort: Int = 0, autoStart: Bool = false) {
+        public init(id: UUID, hostID: UUID, kind: String, bindAddress: String = "127.0.0.1", bindPort: Int, targetHost: String = "", targetPort: Int = 0, autoStart: Bool = false, name: String? = nil, sortOrder: Int? = nil) {
             self.id = id
             self.hostID = hostID
             self.kind = kind
@@ -209,18 +260,56 @@ public struct TepfaDocument: Codable, Sendable, Equatable {
             self.targetHost = targetHost
             self.targetPort = targetPort
             self.autoStart = autoStart
+            self.name = name
+            self.sortOrder = sortOrder
         }
     }
 
     public struct ThemeRecord: Codable, Sendable, Equatable, Identifiable {
         public var id: UUID
         public var name: String
-        public var colors: [String: String]
+        public var source: String?
+        public var scheme: TerminalTheme
 
-        public init(id: UUID, name: String, colors: [String: String]) {
+        public init(id: UUID, name: String, source: String? = nil, scheme: TerminalTheme) {
             self.id = id
             self.name = name
-            self.colors = colors
+            self.source = source
+            self.scheme = scheme
+        }
+    }
+
+    public struct SerialProfileRecord: Codable, Sendable, Equatable, Identifiable {
+        public var id: UUID
+        public var name: String
+        public var devicePath: String
+        public var baudRate: Int
+        public var dataBits: Int
+        public var parity: String
+        public var stopBits: Int
+        public var flowControl: String
+        public var sendLineEnding: String
+        public var convertIncomingLF: Bool
+        public var localEcho: Bool
+        public var hexView: Bool
+        public var colorLabel: String?
+        public var sortOrder: Int
+
+        public init(id: UUID, name: String, devicePath: String, baudRate: Int = 115_200, dataBits: Int = 8, parity: String = "none", stopBits: Int = 1, flowControl: String = "none", sendLineEnding: String = "cr", convertIncomingLF: Bool = true, localEcho: Bool = false, hexView: Bool = false, colorLabel: String? = nil, sortOrder: Int = 0) {
+            self.id = id
+            self.name = name
+            self.devicePath = devicePath
+            self.baudRate = baudRate
+            self.dataBits = dataBits
+            self.parity = parity
+            self.stopBits = stopBits
+            self.flowControl = flowControl
+            self.sendLineEnding = sendLineEnding
+            self.convertIncomingLF = convertIncomingLF
+            self.localEcho = localEcho
+            self.hexView = hexView
+            self.colorLabel = colorLabel
+            self.sortOrder = sortOrder
         }
     }
 
@@ -242,11 +331,22 @@ public struct TepfaDocument: Codable, Sendable, Equatable {
     public struct SecretsRecord: Codable, Sendable, Equatable {
         /// Keyed by identity UUID string.
         public var identities: [String: IdentitySecrets]
+        /// Proxy passwords keyed by the owning host's or group's UUID string.
+        public var proxyPasswords: [String: String]
 
-        public init(identities: [String: IdentitySecrets] = [:]) {
+        public init(identities: [String: IdentitySecrets] = [:], proxyPasswords: [String: String] = [:]) {
             self.identities = identities
+            self.proxyPasswords = proxyPasswords
         }
 
-        public var isEmpty: Bool { identities.isEmpty }
+        private enum CodingKeys: String, CodingKey { case identities, proxyPasswords }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            identities = try container.decodeIfPresent([String: IdentitySecrets].self, forKey: .identities) ?? [:]
+            proxyPasswords = try container.decodeIfPresent([String: String].self, forKey: .proxyPasswords) ?? [:]
+        }
+
+        public var isEmpty: Bool { identities.isEmpty && proxyPasswords.isEmpty }
     }
 }

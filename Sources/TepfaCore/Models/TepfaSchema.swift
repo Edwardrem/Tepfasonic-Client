@@ -12,5 +12,8 @@ public enum TepfaSchema {
         CommandHistoryEntry.self,
         AgentConversation.self,
         AgentAuditEntry.self,
+        PortForwardRule.self,
+        SerialProfile.self,
+        TerminalThemeRecord.self,
     ]
 }

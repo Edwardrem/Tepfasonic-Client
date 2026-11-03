@@ -6,7 +6,7 @@ import SwiftData
 @MainActor
 public struct ImportPlan {
     public enum Kind: String, CaseIterable, Sendable, Identifiable {
-        case group, identity, snippetFolder, snippet, host, knownHost
+        case group, identity, snippetFolder, snippet, host, portForward, theme, serialProfile, knownHost
 
         public var id: String { rawValue }
 
@@ -17,6 +17,9 @@ public struct ImportPlan {
             case .snippetFolder: "Snippet folders"
             case .snippet: "Snippets"
             case .host: "Hosts"
+            case .portForward: "Port forwarding"
+            case .theme: "Themes"
+            case .serialProfile: "Serial profiles"
             case .knownHost: "Known hosts"
             }
         }
@@ -51,6 +54,7 @@ public struct ImportPlan {
         public var secretsStored = 0
         public var keysMovedToKeychain = 0
         public var knownHostsAdded = 0
+        public var proxyPasswordsStored = 0
     }
 
     public let document: TepfaDocument
@@ -94,8 +98,34 @@ public struct ImportPlan {
             // Files written before the agent fields existed keep the current values rather than showing a change.
             if record.agentPermission == nil { record.agentPermission = current?.agentPermission ?? AgentPermissionMode.ask.rawValue }
             if record.agentAllowlist == nil { record.agentAllowlist = current?.agentAllowlist ?? [] }
+            if record.inheritsGroupJumpHost == nil { record.inheritsGroupJumpHost = current?.inheritsGroupJumpHost ?? true }
+            if record.inheritsGroupProxy == nil { record.inheritsGroupProxy = current?.inheritsGroupProxy ?? true }
             let target = record.port == 22 ? "\(record.username)@\(record.hostname)" : "\(record.username)@\(record.hostname):\(record.port)"
             items.append(Self.item(kind: .host, id: record.id.uuidString, title: record.name, subtitle: target, incoming: record, current: current))
+        }
+
+        let rules = Dictionary(try context.fetch(FetchDescriptor<PortForwardRule>()).map { ($0.uuid, $0) }, uniquingKeysWith: { a, _ in a })
+        let hostNames = Dictionary(document.hosts.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        for var record in document.portForwards {
+            let current = rules[record.id].flatMap(TepfaDocument.PortForwardRecord.init)
+            if record.name == nil { record.name = current?.name ?? "" }
+            if record.sortOrder == nil { record.sortOrder = current?.sortOrder ?? 0 }
+            let kind = PortForwardKind(rawValue: record.kind) ?? .local
+            let summary = PortForwardDescription.describe(kind: kind, bindAddress: record.bindAddress, bindPort: record.bindPort, targetHost: record.targetHost, targetPort: record.targetPort)
+            let hostName = hostNames[record.hostID] ?? hosts[record.hostID]?.name ?? "unknown host"
+            items.append(Self.item(kind: .portForward, id: record.id.uuidString, title: record.name.flatMap { $0.isEmpty ? nil : $0 } ?? summary, subtitle: "\(hostName) · \(summary)", incoming: record, current: current))
+        }
+
+        let themes = Dictionary(try context.fetch(FetchDescriptor<TerminalThemeRecord>()).map { ($0.uuid, $0) }, uniquingKeysWith: { a, _ in a })
+        for record in document.themes {
+            let current = themes[record.id].flatMap(TepfaDocument.ThemeRecord.init)
+            items.append(Self.item(kind: .theme, id: record.id.uuidString, title: record.name, subtitle: record.scheme.isDark ? "Dark" : "Light", incoming: record, current: current))
+        }
+
+        let serials = Dictionary(try context.fetch(FetchDescriptor<SerialProfile>()).map { ($0.uuid, $0) }, uniquingKeysWith: { a, _ in a })
+        for record in document.serialProfiles {
+            let current = serials[record.id].map(TepfaDocument.SerialProfileRecord.init)
+            items.append(Self.item(kind: .serialProfile, id: record.id.uuidString, title: record.name, subtitle: "\(record.devicePath) · \(record.baudRate)", incoming: record, current: current))
         }
 
         let known = Dictionary(knownHosts.map { (TepfaDocument.KnownHostRecord($0).id, TepfaDocument.KnownHostRecord($0)) }, uniquingKeysWith: { a, _ in a })
@@ -176,7 +206,8 @@ public struct ImportPlan {
     public func apply(
         to context: ModelContext,
         knownHosts: KnownHostsStore?,
-        secretWriter: ((Identity, TepfaDocument.IdentitySecrets) throws -> Void)? = nil
+        secretWriter: ((Identity, TepfaDocument.IdentitySecrets) throws -> Void)? = nil,
+        proxyPasswordWriter: ((UUID, String) throws -> Void)? = nil
     ) async throws -> Result {
         var result = Result()
         let chosen = Dictionary(items.map { ($0.id, $0.action) }, uniquingKeysWith: { a, _ in a })
@@ -201,6 +232,14 @@ public struct ImportPlan {
             group.name = record.name
             group.sortOrder = record.sortOrder
             group.colorLabel = record.colorLabel
+            group.themeID = record.themeID
+            group.fontName = record.fontName
+            group.fontSize = record.fontSize
+            Self.apply(proxy: record.proxy, kind: &group.proxyKindRaw, host: &group.proxyHost, port: &group.proxyPort, username: &group.proxyUsername)
+            if let password = document.secrets?.proxyPasswords[record.id.uuidString], let proxyPasswordWriter {
+                try proxyPasswordWriter(record.id, password)
+                result.proxyPasswordsStored += 1
+            }
         }
 
         for record in document.identities {
@@ -295,10 +334,100 @@ public struct ImportPlan {
             host.group = try record.groupID.flatMap { try Self.group($0, in: context) }
             host.identity = try record.identityID.flatMap { try Self.identity($0, in: context) }
             host.defaultSnippet = try record.defaultSnippetID.flatMap { try Self.snippet($0, in: context) }
-            if host.identity == nil, host.authMethod == .privateKey {
+            if host.identity == nil, host.authMethod == .privateKey, host.group?.defaultIdentity == nil {
                 // The identity was not imported; fall back to asking for a password.
                 host.authMethod = .password
             }
+            if let inherits = record.inheritsGroupJumpHost { host.inheritsGroupJumpHost = inherits }
+            if let inherits = record.inheritsGroupProxy { host.inheritsGroupProxy = inherits }
+            host.themeID = record.themeID
+            host.fontName = record.fontName
+            host.fontSize = record.fontSize
+            host.backgroundTint = record.backgroundTint
+            host.watermark = record.watermark
+            Self.apply(proxy: record.proxy, kind: &host.proxyKindRaw, host: &host.proxyHost, port: &host.proxyPort, username: &host.proxyUsername)
+            if let password = document.secrets?.proxyPasswords[record.id.uuidString], let proxyPasswordWriter {
+                try proxyPasswordWriter(record.id, password)
+                result.proxyPasswordsStored += 1
+            }
+        }
+
+        // Jump hosts and group defaults refer to hosts, so they are linked once every host exists.
+        for record in document.hosts where action(.host, record.id.uuidString) != .skip {
+            guard let host = try Self.host(record.id, in: context) else { continue }
+            host.jumpHost = try record.jumpHostID.flatMap { id in id == record.id ? nil : try Self.host(id, in: context) }
+        }
+        for record in document.groups where action(.group, record.id.uuidString) != .skip {
+            guard let group = try Self.group(record.id, in: context) else { continue }
+            group.defaultIdentity = try record.defaultIdentityID.flatMap { try Self.identity($0, in: context) }
+            group.defaultJumpHost = try record.defaultJumpHostID.flatMap { try Self.host($0, in: context) }
+        }
+
+        for record in document.portForwards {
+            let action = action(.portForward, record.id.uuidString)
+            count(action)
+            guard action != .skip else { continue }
+            guard let host = try Self.host(record.hostID, in: context) else {
+                result.skipped += 1
+                continue
+            }
+            let rule = try Self.rule(record.id, in: context) ?? {
+                let created = PortForwardRule(uuid: record.id, bindPort: record.bindPort)
+                context.insert(created)
+                return created
+            }()
+            rule.name = record.name ?? ""
+            rule.kindRaw = record.kind
+            rule.bindAddress = record.bindAddress
+            rule.bindPort = record.bindPort
+            rule.targetHost = record.targetHost
+            rule.targetPort = record.targetPort
+            rule.autoStart = record.autoStart
+            rule.sortOrder = record.sortOrder ?? 0
+            rule.host = host
+        }
+
+        for record in document.themes {
+            let action = action(.theme, record.id.uuidString)
+            count(action)
+            guard action != .skip else { continue }
+            var scheme = record.scheme
+            scheme.id = record.id.uuidString
+            scheme.name = record.name
+            let json = try scheme.encodedJSON()
+            let theme = try Self.theme(record.id, in: context) ?? {
+                let created = TerminalThemeRecord(uuid: record.id, name: record.name, schemeJSON: json, source: record.source ?? "import")
+                context.insert(created)
+                return created
+            }()
+            theme.name = record.name
+            theme.schemeJSON = json
+            theme.updatedAt = .now
+            if let source = record.source { theme.source = source }
+        }
+
+        for record in document.serialProfiles {
+            let action = action(.serialProfile, record.id.uuidString)
+            count(action)
+            guard action != .skip else { continue }
+            let profile = try Self.serialProfile(record.id, in: context) ?? {
+                let created = SerialProfile(uuid: record.id, name: record.name, devicePath: record.devicePath)
+                context.insert(created)
+                return created
+            }()
+            profile.name = record.name
+            profile.devicePath = record.devicePath
+            profile.baudRate = record.baudRate
+            profile.dataBits = record.dataBits
+            profile.parityRaw = record.parity
+            profile.stopBits = record.stopBits
+            profile.flowControlRaw = record.flowControl
+            profile.sendLineEndingRaw = record.sendLineEnding
+            profile.convertIncomingLF = record.convertIncomingLF
+            profile.localEcho = record.localEcho
+            profile.hexView = record.hexView
+            profile.colorLabel = record.colorLabel
+            profile.sortOrder = record.sortOrder
         }
 
         if let knownHosts {
@@ -335,5 +464,31 @@ public struct ImportPlan {
 
     static func host(_ id: UUID, in context: ModelContext) throws -> SSHHost? {
         try context.fetch(FetchDescriptor<SSHHost>(predicate: #Predicate { $0.uuid == id })).first
+    }
+
+    static func rule(_ id: UUID, in context: ModelContext) throws -> PortForwardRule? {
+        try context.fetch(FetchDescriptor<PortForwardRule>(predicate: #Predicate { $0.uuid == id })).first
+    }
+
+    static func theme(_ id: UUID, in context: ModelContext) throws -> TerminalThemeRecord? {
+        try context.fetch(FetchDescriptor<TerminalThemeRecord>(predicate: #Predicate { $0.uuid == id })).first
+    }
+
+    static func serialProfile(_ id: UUID, in context: ModelContext) throws -> SerialProfile? {
+        try context.fetch(FetchDescriptor<SerialProfile>(predicate: #Predicate { $0.uuid == id })).first
+    }
+
+    static func apply(proxy: TepfaDocument.ProxyRecord?, kind: inout String?, host: inout String, port: inout Int, username: inout String) {
+        if let proxy {
+            kind = proxy.kind
+            host = proxy.host
+            port = proxy.port
+            username = proxy.username ?? ""
+        } else {
+            kind = nil
+            host = ""
+            port = 0
+            username = ""
+        }
     }
 }

@@ -24,6 +24,9 @@ public final class Identity {
 
     @Relationship(deleteRule: .nullify, inverse: \SSHHost.identity)
     public var hosts: [SSHHost]
+    /// Groups that use this identity as their default.
+    @Relationship(deleteRule: .nullify, inverse: \HostGroup.defaultIdentity)
+    public var groupsByDefault: [HostGroup] = []
 
     public init(
         uuid: UUID = UUID(),
