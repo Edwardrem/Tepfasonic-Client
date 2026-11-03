@@ -1,0 +1,162 @@
+name: Release
+
+# Every tag vX.Y.Z builds, signs and notarizes (when the secrets exist),
+# publishes a GitHub Release with the DMG, updater ZIP, SHA256SUMS and notes,
+# regenerates the Sparkle appcast on the gh-pages branch, and bumps the
+# Homebrew cask. Pre-release tags (vX.Y.Z-beta.N) feed appcast-beta.xml.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: Tepfasonic
+  SPARKLE_VERSION: "2.10.1"
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" && xcodebuild -version
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "marketing=$TAG" >> "$GITHUB_OUTPUT"
+          echo "build=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" == *-* ]]; then echo "channel=beta" >> "$GITHUB_OUTPUT"; else echo "channel=stable" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install tools
+        run: |
+          brew install xcodegen
+          curl -sSL -o sparkle.tar.xz "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+          mkdir -p sparkle && tar -xf sparkle.tar.xz -C sparkle
+          echo "$PWD/sparkle/bin" >> "$GITHUB_PATH"
+
+      - name: Import Developer ID certificate
+        if: ${{ env.DEVELOPER_ID_P12 != '' }}
+        env:
+          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          echo "$DEVELOPER_ID_P12" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          IDENTITY=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)"/\1/')
+          echo "CODE_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_ENV"
+
+      - name: Inject Sparkle public key
+        if: ${{ env.SPARKLE_PUBLIC_KEY != '' }}
+        env:
+          SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
+        run: sed -i '' "s|REPLACE_WITH_SPARKLE_PUBLIC_KEY|$SPARKLE_PUBLIC_KEY|" project.yml
+
+      - name: Build archive
+        run: |
+          xcodegen generate
+          xcodebuild -project Tepfasonic.xcodeproj -scheme Tepfasonic -configuration Release \
+            -derivedDataPath .build/DerivedData -archivePath .build/Tepfasonic.xcarchive \
+            -skipPackagePluginValidation -skipMacroValidation \
+            MARKETING_VERSION="${{ steps.version.outputs.marketing }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build }}" \
+            CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}" \
+            archive | tail -5
+          mkdir -p dist
+          cp -R ".build/Tepfasonic.xcarchive/Products/Applications/${APP_NAME}.app" dist/
+
+      - name: Notarize and staple
+        if: ${{ env.signed == 'true' && env.NOTARY_KEY_ID != '' }}
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          echo "$NOTARY_KEY_P8" > AuthKey.p8
+          ditto -c -k --keepParent "dist/${APP_NAME}.app" notarize.zip
+          xcrun notarytool submit notarize.zip --key AuthKey.p8 --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait
+          xcrun stapler staple "dist/${APP_NAME}.app"
+
+      - name: Package DMG and ZIP
+        run: Scripts/package.sh "dist/${APP_NAME}.app" "${{ steps.version.outputs.marketing }}" dist
+
+      - name: Generate appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          git fetch origin gh-pages:gh-pages || true
+          mkdir -p pages
+          git --work-tree=pages checkout gh-pages -- . 2>/dev/null || true
+          mkdir -p appcast-work
+          cp dist/*.zip appcast-work/
+          cp dist/*.md appcast-work/ 2>/dev/null || true
+          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "$SPARKLE_PRIVATE_KEY" > ed25519.key
+            FEED=appcast.xml; [ "${{ steps.version.outputs.channel }}" = "beta" ] && FEED=appcast-beta.xml
+            generate_appcast --ed-key-file ed25519.key \
+              --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
+              --link "https://github.com/${GITHUB_REPOSITORY}/releases" \
+              $( [ "${{ steps.version.outputs.channel }}" = "beta" ] && echo "--channel beta" ) \
+              -o "pages/$FEED" appcast-work
+            rm -f ed25519.key
+          else
+            echo "SPARKLE_PRIVATE_KEY not set; appcast not regenerated (download-only builds read the feed too, so add the key to enable it)."
+          fi
+
+      - name: Checksums
+        run: cd dist && shasum -a 256 *.dmg *.zip > SHA256SUMS && cat SHA256SUMS
+
+      - name: Release notes
+        run: |
+          {
+            echo "## Tepfasonic ${{ steps.version.outputs.marketing }}"
+            echo
+            if [ "$signed" = "true" ]; then echo "Signed with Developer ID and notarized."; else echo "**Unsigned build.** Right-click → Open the first time, or run \`xattr -dr com.apple.quarantine /Applications/Tepfasonic.app\`."; fi
+            echo
+            echo "### Changes"
+            git log --pretty='- %s' "$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD" | grep -v -i 'merge' | head -50
+          } > dist/RELEASE_NOTES.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+            dist/SHA256SUMS
+          body_path: dist/RELEASE_NOTES.md
+          prerelease: ${{ steps.version.outputs.channel == 'beta' }}
+
+      - name: Publish appcast to gh-pages
+        if: ${{ env.SPARKLE_PRIVATE_KEY != '' }}
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: pages
+          keep_files: true
+
+      - name: Bump Homebrew cask
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' && steps.version.outputs.channel == 'stable' }}
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP: ${{ vars.HOMEBREW_TAP || 'Edwardrem/homebrew-tepfasonic' }}
+        run: |
+          VERSION="${{ steps.version.outputs.marketing }}"
+          SHA=$(shasum -a 256 "dist/${APP_NAME}-${VERSION}.dmg" | cut -d' ' -f1)
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP}.git" tap
+          mkdir -p tap/Casks
+          sed -e "s/__VERSION__/${VERSION}/g" -e "s/__SHA256__/${SHA}/g" Casks/tepfasonic.rb > tap/Casks/tepfasonic.rb
+          cd tap && git config user.name "tepfasonic-ci" && git config user.email "ci@tepfasonic" \
+            && git add Casks/tepfasonic.rb && git commit -m "tepfasonic ${VERSION}" && git push

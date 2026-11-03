@@ -1,0 +1,20 @@
+# Xcode / SwiftPM
+.build/
+DerivedData/
+*.xcodeproj/
+!project.yml
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+Package.resolved.bak
+
+# macOS
+.DS_Store
+
+# Signing / secrets (never commit)
+*.p12
+*.mobileprovision
+*.cer
+sparkle_private_key*
+*.tepfa

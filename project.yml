@@ -1,0 +1,127 @@
+# XcodeGen spec. Regenerate the Xcode project with:  xcodegen generate
+# (brew install xcodegen). The generated Tepfasonic.xcodeproj is git-ignored.
+name: Tepfasonic
+options:
+  bundleIdPrefix: com.tepfasonic
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+packages:
+  Tepfa:
+    path: .
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.10.1"
+targets:
+  Tepfasonic:
+    type: application
+    platform: macOS
+    sources:
+      - path: App/Tepfasonic
+    dependencies:
+      - package: Tepfa
+        product: TepfaCore
+      - package: Tepfa
+        product: TepfaSSH
+      - package: Tepfa
+        product: TepfaTerminal
+      - package: Tepfa
+        product: TepfaAgent
+      - package: Sparkle
+        product: Sparkle
+      # The MCP stdio bridge ships inside the app bundle (Contents/MacOS/tepfasonic-mcp).
+      - target: tepfasonic-mcp
+        embed: true
+        codeSign: true
+        copy:
+          destination: executables
+    info:
+      path: App/Tepfasonic/Info.plist
+      properties:
+        CFBundleName: Tepfasonic
+        CFBundleDisplayName: Tepfasonic
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHumanReadableCopyright: "Copyright © 2026 Rufaro Edward Mutepfa. MIT License."
+        NSPrincipalClass: NSApplication
+        NSSupportsAutomaticTermination: false
+        NSSupportsSuddenTermination: false
+        # Sparkle. SUPublicEDKey is filled in once `generate_keys` has been run
+        # (see docs/RELEASING.md); until then updates are download-only.
+        SUFeedURL: https://edwardrem.github.io/Tepfasonic-Client/appcast.xml
+        SUPublicEDKey: REPLACE_WITH_SPARKLE_PUBLIC_KEY
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400
+        SUAllowsAutomaticUpdates: false
+        CFBundleURLTypes:
+          - CFBundleURLName: com.tepfasonic.client
+            CFBundleURLSchemes: [tepfasonic]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Tepfasonic Export
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.tepfasonic.tepfa]
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.tepfasonic.tepfa
+            UTTypeDescription: Tepfasonic Export
+            UTTypeConformsTo: [public.json]
+            UTTypeTagSpecification:
+              public.filename-extension: [tepfa]
+              public.mime-type: [application/vnd.tepfasonic.tepfa+json]
+    entitlements:
+      path: App/Tepfasonic/Tepfasonic.entitlements
+      properties:
+        # Not sandboxed yet: reading keys from ~/.ssh and (later) ~/.ssh/config
+        # interop are far simpler outside the sandbox. Revisit before any
+        # App Store distribution.
+        com.apple.security.app-sandbox: false
+        com.apple.security.network.client: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tepfasonic.client
+        PRODUCT_NAME: Tepfasonic
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        ENABLE_HARDENED_RUNTIME: true
+        # Ad-hoc signing until a Developer ID certificate is available (see docs/PLAN.md).
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: false
+        COMBINE_HIDPI_IMAGES: true
+        DEAD_CODE_STRIPPING: true
+  tepfasonic-mcp:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/tepfasonic-mcp
+    settings:
+      base:
+        PRODUCT_NAME: tepfasonic-mcp
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
+        SKIP_INSTALL: true
+        DEAD_CODE_STRIPPING: true
+schemes:
+  Tepfasonic:
+    build:
+      targets:
+        Tepfasonic: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: []
+    archive:
+      config: Release

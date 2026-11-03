@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" && xcodebuild -version
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Unit tests
+        run: swift test --parallel
+
+      - name: Live SSH tests
+        run: |
+          Scripts/test-sshd.sh start
+          source .build/test-sshd/env.sh
+          swift test --filter Live
+          Scripts/test-sshd.sh stop
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build app (ad-hoc signed)
+        run: |
+          xcodegen generate
+          xcodebuild -project Tepfasonic.xcodeproj -scheme Tepfasonic -configuration Debug \
+            -derivedDataPath .build/DerivedData -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGN_IDENTITY=- build | tail -5

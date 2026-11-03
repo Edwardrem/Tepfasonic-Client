@@ -1,0 +1,32 @@
+name: Site
+
+# Publishes site/ to the gh-pages branch, keeping the appcast files the
+# release workflow writes there. GitHub Pages serves that branch.
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "docs/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble site
+        run: |
+          mkdir -p out
+          cp -R site/. out/
+          mkdir -p out/docs
+          cp docs/PLAN.md out/docs/PLAN.md
+          cp docs/RELEASING.md out/docs/RELEASING.md
+          touch out/.nojekyll
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: out
+          keep_files: true
