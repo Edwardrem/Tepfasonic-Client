@@ -1,5 +1,6 @@
 import Foundation
 import TepfaCore
+import TepfaSSH
 
 /// Sendable snapshot of an `Identity`: what the credential store needs to find
 /// the secret, never the secret itself.
@@ -44,7 +45,31 @@ public struct IdentityDescriptor: Sendable, Hashable, Identifiable, Codable {
     }
 }
 
+/// Terminal look settings resolved for one host (host, then group, then global).
+public struct HostAppearance: Sendable, Hashable, Codable {
+    /// `builtin:<slug>`, a saved theme UUID, or nil for the global scheme.
+    public var themeID: String?
+    public var fontName: String?
+    public var fontSize: Double?
+    public var backgroundTint: String?
+    public var watermark: String?
+
+    public init(themeID: String? = nil, fontName: String? = nil, fontSize: Double? = nil, backgroundTint: String? = nil, watermark: String? = nil) {
+        self.themeID = themeID
+        self.fontName = fontName
+        self.fontSize = fontSize
+        self.backgroundTint = backgroundTint
+        self.watermark = watermark
+    }
+
+    public var isEmpty: Bool { themeID == nil && fontName == nil && fontSize == nil && backgroundTint == nil && watermark == nil }
+}
+
 /// An immutable, Sendable snapshot of the fields a session needs from an `SSHHost`.
+///
+/// A descriptor can also describe a serial console (`serial` set): the
+/// session then opens the device instead of an SSH connection, and the
+/// hostname carries the device path.
 public struct HostDescriptor: Sendable, Hashable, Identifiable, Codable {
     public let id: UUID
     public let name: String
@@ -63,6 +88,15 @@ public struct HostDescriptor: Sendable, Hashable, Identifiable, Codable {
     /// What the Claude agent may run here without asking.
     public let agentPermission: AgentPermissionMode
     public let agentAllowlist: [String]
+    /// Bastions to go through, outermost first: the first hop is reached directly
+    /// (or through `proxy`), each later hop through the one before it, and the
+    /// host itself through the last.
+    public let jumpChain: [HostDescriptor]
+    /// Proxy for the first TCP connection of the chain.
+    public let proxy: HostProxyConfiguration?
+    public let appearance: HostAppearance
+    /// Set for serial consoles.
+    public let serial: SerialSettings?
 
     public init(
         id: UUID = UUID(),
@@ -78,7 +112,11 @@ public struct HostDescriptor: Sendable, Hashable, Identifiable, Codable {
         startupCommand: String? = nil,
         shellIntegration: ShellIntegrationMode = .automatic,
         agentPermission: AgentPermissionMode = .ask,
-        agentAllowlist: [String] = []
+        agentAllowlist: [String] = [],
+        jumpChain: [HostDescriptor] = [],
+        proxy: HostProxyConfiguration? = nil,
+        appearance: HostAppearance = HostAppearance(),
+        serial: SerialSettings? = nil
     ) {
         self.id = id
         self.name = name
@@ -94,13 +132,17 @@ public struct HostDescriptor: Sendable, Hashable, Identifiable, Codable {
         self.shellIntegration = shellIntegration
         self.agentPermission = agentPermission
         self.agentAllowlist = agentAllowlist
+        self.jumpChain = jumpChain
+        self.proxy = proxy
+        self.appearance = appearance
+        self.serial = serial
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, hostname, port, username, authMethod, identity, colorLabel, autoReconnect, isTransient, startupCommand, shellIntegration, agentPermission, agentAllowlist
+        case id, name, hostname, port, username, authMethod, identity, colorLabel, autoReconnect, isTransient, startupCommand, shellIntegration, agentPermission, agentAllowlist, jumpChain, proxy, appearance, serial
     }
 
-    /// Tolerates snapshots written before `startupCommand` and `shellIntegration` existed.
+    /// Tolerates snapshots written before the later fields existed.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
@@ -117,20 +159,62 @@ public struct HostDescriptor: Sendable, Hashable, Identifiable, Codable {
             startupCommand: try container.decodeIfPresent(String.self, forKey: .startupCommand),
             shellIntegration: try container.decodeIfPresent(ShellIntegrationMode.self, forKey: .shellIntegration) ?? .automatic,
             agentPermission: try container.decodeIfPresent(AgentPermissionMode.self, forKey: .agentPermission) ?? .ask,
-            agentAllowlist: try container.decodeIfPresent([String].self, forKey: .agentAllowlist) ?? [])
+            agentAllowlist: try container.decodeIfPresent([String].self, forKey: .agentAllowlist) ?? [],
+            jumpChain: try container.decodeIfPresent([HostDescriptor].self, forKey: .jumpChain) ?? [],
+            proxy: try container.decodeIfPresent(HostProxyConfiguration.self, forKey: .proxy),
+            appearance: try container.decodeIfPresent(HostAppearance.self, forKey: .appearance) ?? HostAppearance(),
+            serial: try container.decodeIfPresent(SerialSettings.self, forKey: .serial))
     }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(hostname, forKey: .hostname)
+        try container.encode(port, forKey: .port)
+        try container.encode(username, forKey: .username)
+        try container.encode(authMethod, forKey: .authMethod)
+        try container.encodeIfPresent(identity, forKey: .identity)
+        try container.encodeIfPresent(colorLabel, forKey: .colorLabel)
+        try container.encode(autoReconnect, forKey: .autoReconnect)
+        try container.encode(isTransient, forKey: .isTransient)
+        try container.encodeIfPresent(startupCommand, forKey: .startupCommand)
+        try container.encode(shellIntegration, forKey: .shellIntegration)
+        try container.encode(agentPermission, forKey: .agentPermission)
+        try container.encode(agentAllowlist, forKey: .agentAllowlist)
+        if !jumpChain.isEmpty { try container.encode(jumpChain, forKey: .jumpChain) }
+        try container.encodeIfPresent(proxy, forKey: .proxy)
+        if !appearance.isEmpty { try container.encode(appearance, forKey: .appearance) }
+        try container.encodeIfPresent(serial, forKey: .serial)
+    }
+
+    /// The most hops a chain may have; deeper chains are cut (and a cycle is broken) here.
+    public static let maximumJumpDepth = 8
 
     @MainActor
     public init(_ host: SSHHost) {
+        self.init(host, visited: [host.uuid])
+    }
+
+    /// Builds the descriptor and its jump chain. `visited` breaks cycles.
+    @MainActor
+    private init(_ host: SSHHost, visited: Set<UUID>) {
+        var chain: [HostDescriptor] = []
+        if let jump = host.effectiveJumpHost, !visited.contains(jump.uuid), visited.count < Self.maximumJumpDepth {
+            let bastion = HostDescriptor(jump, visited: visited.union([jump.uuid]))
+            chain = bastion.jumpChain + [bastion.withoutJumpChain()]
+        }
+        let identity = host.effectiveIdentity
+        let group = host.group
         self.init(
             id: host.uuid,
             name: host.name,
             hostname: host.hostname,
             port: host.port,
             username: host.username,
-            authMethod: host.authMethod,
-            identity: host.identity.map(IdentityDescriptor.init),
-            colorLabel: host.colorLabel ?? host.group?.colorLabel,
+            authMethod: identity != nil ? .privateKey : host.authMethod,
+            identity: identity.map(IdentityDescriptor.init),
+            colorLabel: host.colorLabel ?? group?.colorLabel,
             autoReconnect: host.autoReconnect,
             isTransient: false,
             startupCommand: host.defaultSnippet.map { snippet in
@@ -138,8 +222,44 @@ public struct HostDescriptor: Sendable, Hashable, Identifiable, Codable {
             },
             shellIntegration: host.shellIntegration,
             agentPermission: host.agentPermission,
-            agentAllowlist: host.agentAllowlist)
+            agentAllowlist: host.agentAllowlist,
+            jumpChain: chain,
+            proxy: host.effectiveProxy,
+            appearance: HostAppearance(
+                themeID: host.themeID ?? group?.themeID,
+                fontName: host.fontName ?? group?.fontName,
+                fontSize: host.fontSize ?? group?.fontSize,
+                backgroundTint: host.backgroundTint,
+                watermark: host.watermark))
     }
+
+    /// A serial console as a descriptor; `hostname` is the device path.
+    @MainActor
+    public init(_ profile: SerialProfile) {
+        self.init(
+            id: profile.uuid,
+            name: profile.name,
+            hostname: profile.devicePath,
+            port: 0,
+            username: "",
+            authMethod: .password,
+            colorLabel: profile.colorLabel,
+            autoReconnect: true,
+            shellIntegration: .disabled,
+            agentPermission: .readOnly,
+            serial: SerialSettings(profile))
+    }
+
+    /// The same host without its chain (a hop inside another chain).
+    func withoutJumpChain() -> HostDescriptor {
+        HostDescriptor(
+            id: id, name: name, hostname: hostname, port: port, username: username, authMethod: authMethod, identity: identity,
+            colorLabel: colorLabel, autoReconnect: autoReconnect, isTransient: isTransient, startupCommand: nil,
+            shellIntegration: shellIntegration, agentPermission: agentPermission, agentAllowlist: agentAllowlist,
+            jumpChain: [], proxy: proxy, appearance: appearance, serial: nil)
+    }
+
+    public var isSerial: Bool { serial != nil }
 
     /// The login name actually sent: the identity's when it has one, else the host's.
     public var loginUsername: String {
@@ -149,7 +269,7 @@ public struct HostDescriptor: Sendable, Hashable, Identifiable, Codable {
 
     /// True when connecting will not need to ask the user anything (keys, or a
     /// password the store may hold). Used to decide which tabs auto-reconnect at launch.
-    public var usesIdentity: Bool { identity != nil }
+    public var usesIdentity: Bool { identity != nil || isSerial }
 
     /// Parses `user@host:port`, `user@host`, `host:port` or `host` into an unsaved descriptor.
     public static func quickConnect(_ input: String, defaultUsername: String = NSUserName()) -> HostDescriptor? {
@@ -179,8 +299,17 @@ public struct HostDescriptor: Sendable, Hashable, Identifiable, Codable {
             isTransient: true)
     }
 
-    /// `user@host[:port]`
+    /// `user@host[:port]`, or the device and line settings for a serial console.
     public var target: String {
-        port == 22 ? "\(loginUsername)@\(hostname)" : "\(loginUsername)@\(hostname):\(port)"
+        if let serial { return "\(hostname) · \(serial.lineSummary)" }
+        return port == 22 ? "\(loginUsername)@\(hostname)" : "\(loginUsername)@\(hostname):\(port)"
+    }
+
+    /// `via bastion1, bastion2` for the status bar; empty without a chain.
+    public var routeDescription: String {
+        var parts: [String] = []
+        if let proxy { parts.append("proxy \(proxy.displayTarget)") }
+        if !jumpChain.isEmpty { parts.append("via " + jumpChain.map(\.name).joined(separator: " → ")) }
+        return parts.joined(separator: ", ")
     }
 }

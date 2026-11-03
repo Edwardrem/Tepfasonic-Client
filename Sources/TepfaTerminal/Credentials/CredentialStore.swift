@@ -17,6 +17,13 @@ public protocol CredentialStore: AnyObject {
     func storedPassphrase(for identity: IdentityDescriptor) async throws -> String?
     func remember(passphrase: String, for identity: IdentityDescriptor) throws
     func forgetPassphrase(for identity: IdentityDescriptor)
+
+    /// The password saved for the proxy owned by a host or group; nil when none.
+    func proxyPassword(ownerID: UUID) async throws -> String?
+}
+
+public extension CredentialStore {
+    func proxyPassword(ownerID: UUID) async throws -> String? { nil }
 }
 
 /// The production store: secrets in the Keychain behind the `Vault`.
@@ -94,6 +101,25 @@ public final class KeychainCredentialStore: CredentialStore {
 
     public func forgetPassphrase(for identity: IdentityDescriptor) {
         try? secrets.delete(account: SecretAccount.identityPassphrase(identity.id))
+    }
+
+    public func proxyPassword(ownerID: UUID) async throws -> String? {
+        let account = SecretAccount.proxyPassword(ownerID)
+        guard secrets.exists(account: account) else { return nil }
+        try await vault.ensureUnlocked(reason: "use the saved proxy password")
+        return try secrets.string(account: account)
+    }
+
+    public func rememberProxyPassword(_ password: String, ownerID: UUID) throws {
+        try secrets.set(password, account: SecretAccount.proxyPassword(ownerID), label: "Tepfasonic proxy password")
+    }
+
+    public func forgetProxyPassword(ownerID: UUID) {
+        try? secrets.delete(account: SecretAccount.proxyPassword(ownerID))
+    }
+
+    public func hasProxyPassword(ownerID: UUID) -> Bool {
+        secrets.exists(account: SecretAccount.proxyPassword(ownerID))
     }
 
     // MARK: Key material management (Identities window)

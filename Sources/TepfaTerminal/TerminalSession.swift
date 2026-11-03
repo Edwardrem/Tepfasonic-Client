@@ -61,6 +61,15 @@ public final class TerminalSession: Identifiable {
     public private(set) var state: State = .idle
     public private(set) var title: String
     public var prompt: Prompt?
+    /// The host (or jump host) the current prompt is about; `host` unless a bastion is asking.
+    public private(set) var promptHost: HostDescriptor
+    /// Bumped whenever the SSH connection is established or lost, so port
+    /// forwarders and the SFTP browser can follow reconnects.
+    public private(set) var connectionVersion = 0
+    /// Serial consoles only: show incoming bytes as a hex dump.
+    public var hexView = false
+    /// Bytes received from the serial device so far (hex dump offsets).
+    private var serialOffset = 0
     /// Host key presented by the server on the most recent attempt.
     public private(set) var hostKey: HostKeyInfo?
     public private(set) var cols = 80
@@ -85,17 +94,20 @@ public final class TerminalSession: Identifiable {
 
     private let knownHosts: KnownHostsStore
     private let credentialStore: any CredentialStore
-    private var connection: SSHConnection?
+    private var connection: SSHConnection? {
+        didSet { connectionVersion += 1 }
+    }
     private var shell: SSHShellSession?
+    private var serialPort: SerialPort?
     private weak var sink: (any TerminalSink)?
     /// Output received before a terminal view attached.
     private var buffered: [UInt8] = []
     /// Incremented on every connect/disconnect so stale callbacks are ignored.
     private var generation = 0
-    /// Remembered for silent reconnects. Memory only; cleared when rejected.
-    private var cachedCredentials: SSHCredentials?
-    /// True when the password in use came from the credential store.
-    private var passwordFromStore = false
+    /// Remembered per hop (bastions and the host) for silent reconnects. Memory only; cleared when rejected.
+    private var cachedCredentials: [UUID: SSHCredentials] = [:]
+    /// Hops whose password came from the credential store, so a rejection deletes it.
+    private var passwordFromStore: Set<UUID> = []
     private var reconnectAttempt = 0
     private var reconnectTask: Task<Void, Never>?
     /// A headless terminal fed the same bytes as the view, so the buffer can be
@@ -132,6 +144,8 @@ public final class TerminalSession: Identifiable {
         self.knownHosts = knownHosts
         self.credentialStore = credentialStore
         self.historyRecorder = historyRecorder
+        self.promptHost = host
+        self.hexView = host.serial?.hexView ?? false
         self.title = mode == .agentLog ? "Agent · \(host.name)" : host.name
         var options = TerminalOptions.default
         options.scrollback = 2_000
@@ -164,6 +178,25 @@ public final class TerminalSession: Identifiable {
 
     public var isConnected: Bool { state == .connected }
 
+    /// The live SSH connection to the host (not a bastion), or nil while disconnected or serial.
+    public var activeConnection: SSHConnection? {
+        guard let connection, connection.isActive, state == .connected else { return nil }
+        return connection
+    }
+
+    /// Waits until the session is connected (or has given up) and returns the connection.
+    public func waitForConnection(timeout: Duration = .seconds(60)) async -> SSHConnection? {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if let connection = activeConnection { return connection }
+            if case .failed = state { return nil }
+            if case .disconnected = state { return nil }
+            if case .idle = state { return nil }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return activeConnection
+    }
+
     public var isBusy: Bool {
         switch state {
         case .connecting, .reconnecting: true
@@ -191,38 +224,47 @@ public final class TerminalSession: Identifiable {
         state = .connecting
         generation += 1
         let myGeneration = generation
+        promptHost = host
 
-        guard let credentials = await gatherCredentials() else {
-            if state == .connecting { state = .idle }
+        if host.isSerial {
+            await attemptSerialConnection(generation: myGeneration)
             return
         }
-        guard myGeneration == generation else { return }
 
-        let verifier = ClosureHostKeyVerifier { [weak self] key, _, _ in
-            guard let self else { return false }
-            return await self.verifyHostKey(key)
+        let connection: SSHConnection
+        do {
+            guard let established = try await establishChain(generation: myGeneration) else {
+                if state == .connecting { state = .idle }
+                return
+            }
+            connection = established
+        } catch {
+            guard myGeneration == generation else { return }
+            self.connection = nil
+            shell = nil
+            let message = error.localizedDescription
+            if reconnectAttempt > 0, case SSHClientError.connectionFailed = error {
+                scheduleReconnect(after: "Reconnect failed: \(message)")
+            } else {
+                state = .failed(message)
+                queuedCommands.removeAll()
+            }
+            return
+        }
+        guard myGeneration == generation else {
+            connection.closeChain()
+            return
+        }
+        self.connection = connection
+
+        if mode == .agentLog {
+            reconnectAttempt = 0
+            state = .connected
+            receive(Array("\u{1b}[2m[agent] connected to \(host.target); commands run over exec channels and appear here\u{1b}[0m\r\n".utf8), generation: myGeneration)
+            return
         }
 
         do {
-            let connection = try await SSHConnection.connect(
-                host: host.hostname,
-                port: host.port,
-                credentials: credentials,
-                hostKeyVerifier: verifier)
-            guard myGeneration == generation else {
-                connection.close()
-                return
-            }
-            self.connection = connection
-
-            if mode == .agentLog {
-                cachedCredentials = credentials
-                reconnectAttempt = 0
-                state = .connected
-                receive(Array("\u{1b}[2m[agent] connected to \(host.target); commands run over exec channels and appear here\u{1b}[0m\r\n".utf8), generation: myGeneration)
-                return
-            }
-
             let shell = try await connection.openShell(
                 cols: cols,
                 rows: rows,
@@ -243,11 +285,10 @@ public final class TerminalSession: Identifiable {
                 })
             guard myGeneration == generation else {
                 shell.close()
-                connection.close()
+                connection.closeChain()
                 return
             }
             self.shell = shell
-            cachedCredentials = credentials
             reconnectAttempt = 0
             state = .connected
             beginShellSetup(connection: connection)
@@ -255,24 +296,176 @@ public final class TerminalSession: Identifiable {
             shell.resize(cols: cols, rows: rows)
         } catch {
             guard myGeneration == generation else { return }
-            connection?.close()
-            connection = nil
+            connection.closeChain()
+            self.connection = nil
             shell = nil
-            var message = error.localizedDescription
-            if case SSHClientError.authenticationFailed = error {
-                cachedCredentials = nil
-                if passwordFromStore {
-                    credentialStore.forgetPassword(for: host)
-                    passwordFromStore = false
-                    message += " The saved password was rejected and has been removed; you will be asked next time."
+            state = .failed(error.localizedDescription)
+            queuedCommands.removeAll()
+        }
+    }
+
+    /// Connects each bastion in turn, then the host through the last one.
+    /// Returns nil when the user cancelled a prompt. Authentication failures
+    /// clear the cached credentials of the hop that failed.
+    private func establishChain(generation myGeneration: Int) async throws -> SSHConnection? {
+        var via: SSHConnection?
+        let hops = host.jumpChain + [host.withoutJumpChain()]
+        let firstProxy = host.jumpChain.first?.proxy ?? host.proxy
+        for (index, hop) in hops.enumerated() {
+            let isTarget = index == hops.count - 1
+            promptHost = hop
+            guard let credentials = await gatherCredentials(for: hop) else {
+                via?.closeChain()
+                return nil
+            }
+            guard myGeneration == generation else {
+                via?.closeChain()
+                return nil
+            }
+            var proxy: ProxySettings?
+            if index == 0, let configured = firstProxy {
+                proxy = try await resolveProxy(configured)
+            }
+            let verifier = ClosureHostKeyVerifier { [weak self] key, _, _ in
+                guard let self else { return false }
+                return await self.verifyHostKey(key, for: hop, isTarget: isTarget)
+            }
+            do {
+                let connection = try await SSHConnection.connect(
+                    host: hop.hostname,
+                    port: hop.port,
+                    credentials: credentials,
+                    hostKeyVerifier: verifier,
+                    proxy: proxy,
+                    via: via)
+                via = connection
+            } catch {
+                via?.closeChain()
+                if case SSHClientError.authenticationFailed = error {
+                    cachedCredentials[hop.id] = nil
+                    if passwordFromStore.contains(hop.id) {
+                        credentialStore.forgetPassword(for: hop)
+                        passwordFromStore.remove(hop.id)
+                        let message = error.localizedDescription + " The saved password was rejected and has been removed; you will be asked next time."
+                        throw isTarget ? SSHClientError.authenticationFailed(message) : SSHClientError.connectionFailed("Jump host \(hop.name): \(message)")
+                    }
                 }
+                if isTarget { throw error }
+                throw SSHClientError.connectionFailed("Jump host \(hop.name): \(error.localizedDescription)")
             }
-            if reconnectAttempt > 0, case SSHClientError.connectionFailed = error {
-                scheduleReconnect(after: "Reconnect failed: \(message)")
+        }
+        promptHost = host
+        return via
+    }
+
+    /// The proxy with its password, when one is saved for the host or group that owns it.
+    private func resolveProxy(_ configured: HostProxyConfiguration) async throws -> ProxySettings {
+        var settings = ProxySettings(kind: ProxySettings.Kind(rawValue: configured.kind) ?? .http, host: configured.host, port: configured.port, username: configured.username)
+        if configured.username != nil {
+            do {
+                settings.password = try await credentialStore.proxyPassword(ownerID: configured.ownerID)
+            } catch VaultError.cancelled {
+                throw CredentialResolver.Failure.cancelled
+            } catch {
+                notice("Could not read the proxy password: \(error.localizedDescription)")
+            }
+        }
+        return settings
+    }
+
+    // MARK: - Serial
+
+    private func attemptSerialConnection(generation myGeneration: Int) async {
+        guard let settings = host.serial else { return }
+        serialOffset = 0
+        let port = SerialPort(
+            settings: settings,
+            onData: { [weak self] bytes in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.receiveSerial(bytes, generation: myGeneration) }
+                }
+            },
+            onClose: { [weak self] reason in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.serialClosed(reason, generation: myGeneration) }
+                }
+            })
+        do {
+            try port.open()
+        } catch {
+            guard myGeneration == generation else { return }
+            if reconnectAttempt > 0 {
+                scheduleReconnect(after: "Reconnect failed: \(error.localizedDescription)")
             } else {
-                state = .failed(message)
-                queuedCommands.removeAll()
+                state = .failed(error.localizedDescription)
             }
+            return
+        }
+        guard myGeneration == generation else {
+            port.close()
+            return
+        }
+        serialPort = port
+        reconnectAttempt = 0
+        state = .connected
+        shellReady = true
+        notice("Opened \(settings.devicePath) at \(settings.lineSummary)\(hexView ? ", hex view" : "")")
+        let queued = queuedCommands
+        queuedCommands.removeAll()
+        for command in queued { sendCommand(command) }
+    }
+
+    private func receiveSerial(_ bytes: [UInt8], generation: Int) {
+        guard generation == self.generation, let settings = host.serial else { return }
+        if hexView {
+            receive(Array(HexDump.lines(bytes, offset: serialOffset).utf8), generation: generation)
+        } else if settings.convertIncomingLF {
+            var out: [UInt8] = []
+            out.reserveCapacity(bytes.count + 8)
+            var previous: UInt8 = 0
+            for byte in bytes {
+                if byte == 0x0A, previous != 0x0D { out.append(0x0D) }
+                out.append(byte)
+                previous = byte
+            }
+            receive(out, generation: generation)
+        } else {
+            receive(bytes, generation: generation)
+        }
+        serialOffset += bytes.count
+    }
+
+    private func serialClosed(_ reason: String?, generation: Int) {
+        guard generation == self.generation else { return }
+        self.generation += 1
+        serialPort = nil
+        notice(reason ?? "Serial port closed")
+        if let reason, host.autoReconnect {
+            scheduleReconnect(after: reason)
+        } else {
+            state = .disconnected(reason ?? "Disconnected")
+        }
+    }
+
+    /// Keystrokes for a serial console: Return becomes the configured line ending.
+    private func sendSerial(_ bytes: ArraySlice<UInt8>, settings: SerialSettings) {
+        var out: [UInt8] = []
+        out.reserveCapacity(bytes.count + 4)
+        for byte in bytes {
+            if byte == 0x0D {
+                out.append(contentsOf: settings.sendLineEnding.bytes)
+            } else {
+                out.append(byte)
+            }
+        }
+        serialPort?.write(out)
+        if settings.localEcho, !hexView {
+            var echo: [UInt8] = []
+            for byte in bytes {
+                if byte == 0x0D { echo.append(contentsOf: [0x0D, 0x0A]) } else { echo.append(byte) }
+            }
+            mirror.feed(byteArray: echo)
+            sink?.feed(echo[...])
         }
     }
 
@@ -285,7 +478,9 @@ public final class TerminalSession: Identifiable {
         shellReady = false
         queuedCommands.removeAll()
         shell?.close()
-        connection?.close()
+        connection?.closeChain()
+        serialPort?.close()
+        serialPort = nil
         shell = nil
         connection = nil
         if case .connected = state {
@@ -302,7 +497,8 @@ public final class TerminalSession: Identifiable {
     /// Drops the saved host key for this host and connects again. Used after a
     /// "host key changed" refusal the user has decided is legitimate.
     public func forgetHostKeyAndReconnect() async {
-        try? await knownHosts.forget(host: host.hostname, port: host.port)
+        let hop = promptHost
+        try? await knownHosts.forget(host: hop.hostname, port: hop.port)
         await reconnect()
     }
 
@@ -318,7 +514,11 @@ public final class TerminalSession: Identifiable {
     /// Keyboard input from the terminal view.
     public func send(_ bytes: ArraySlice<UInt8>) {
         guard mode == .shell else { return }
-        shell?.write(bytes)
+        if let settings = host.serial {
+            sendSerial(bytes, settings: settings)
+        } else {
+            shell?.write(bytes)
+        }
         guard !mirror.isCurrentBufferAlternate else { return }
         switch typedTracker.consume(bytes) {
         case .submitted(let line):
@@ -427,6 +627,9 @@ public final class TerminalSession: Identifiable {
         echo: Bool = true,
         echoOutput: Bool = true
     ) async throws -> CommandResult {
+        if host.isSerial {
+            throw SSHClientError.channelFailed("serial consoles cannot run commands over exec channels")
+        }
         if connection == nil || connection?.isActive == false {
             if case .connecting = state {} else { await connect() }
             while case .connecting = state { try await Task.sleep(for: .milliseconds(50)) }
@@ -498,8 +701,8 @@ public final class TerminalSession: Identifiable {
 
     // MARK: - Internals
 
-    private func gatherCredentials() async -> SSHCredentials? {
-        if let cachedCredentials { return cachedCredentials }
+    private func gatherCredentials(for hop: HostDescriptor) async -> SSHCredentials? {
+        if let cached = cachedCredentials[hop.id] { return cached }
         let resolver = CredentialResolver(
             store: credentialStore,
             askPassword: { [weak self] _ in
@@ -520,31 +723,33 @@ public final class TerminalSession: Identifiable {
             },
             notify: { [weak self] message in self?.notice(message) })
         do {
-            let resolution = try await resolver.resolve(for: host)
-            passwordFromStore = resolution.passwordFromStore
+            let resolution = try await resolver.resolve(for: hop)
+            if resolution.passwordFromStore { passwordFromStore.insert(hop.id) } else { passwordFromStore.remove(hop.id) }
+            cachedCredentials[hop.id] = resolution.credentials
             return resolution.credentials
         } catch CredentialResolver.Failure.cancelled {
             return nil
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(hop.id == host.id ? error.localizedDescription : "Jump host \(hop.name): \(error.localizedDescription)")
             return nil
         }
     }
 
-    private func verifyHostKey(_ key: HostKeyInfo) async -> Bool {
-        hostKey = key
+    private func verifyHostKey(_ key: HostKeyInfo, for hop: HostDescriptor, isTarget: Bool) async -> Bool {
+        if isTarget { hostKey = key }
         let verdict = await knownHosts.verdict(
-            host: host.hostname, port: host.port, keyType: key.keyType, publicKey: key.openSSHPublicKey)
+            host: hop.hostname, port: hop.port, keyType: key.keyType, publicKey: key.openSSHPublicKey)
         if verdict == .known {
             return true
         }
+        promptHost = hop
         let accepted: Bool = await withCheckedContinuation { continuation in
             prompt = .hostKey(key, verdict: verdict, respond: continuation)
         }
         prompt = nil
         if accepted {
             try? await knownHosts.remember(
-                host: host.hostname, port: host.port, keyType: key.keyType,
+                host: hop.hostname, port: hop.port, keyType: key.keyType,
                 publicKey: key.openSSHPublicKey, fingerprintSHA256: key.fingerprintSHA256)
         }
         return accepted
@@ -745,7 +950,7 @@ public final class TerminalSession: Identifiable {
         guard generation == self.generation else { return }
         self.generation += 1
         shell = nil
-        connection?.close()
+        connection?.closeChain()
         connection = nil
         let cleanExit = reason.exitStatus != nil || reason.signal != nil
         notice(reason.message)
