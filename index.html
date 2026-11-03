@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tepfasonic</title>
+  <meta name="description" content="A free, open-source SSH client and terminal for macOS with a built-in Claude agent. No account, no server, no subscription.">
+  <style>
+    :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --accent: #2a99e6; --card: #f5f5f7; --border: #e5e5ea; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #111113; --fg: #f5f5f7; --muted: #a1a1a6; --card: #1c1c1e; --border: #2c2c2e; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", Helvetica, Arial, sans-serif; }
+    main { max-width: 880px; margin: 0 auto; padding: 56px 16px 80px; }
+    header { text-align: center; margin-bottom: 48px; }
+    h1 { font-size: 44px; margin: 0 0 8px; letter-spacing: -0.02em; }
+    .tagline { color: var(--muted); font-size: 20px; margin: 0 0 24px; }
+    .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .button { display: inline-block; padding: 12px 22px; border-radius: 10px; text-decoration: none; font-weight: 600; }
+    .primary { background: var(--accent); color: #fff; }
+    .secondary { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
+    .note { color: var(--muted); font-size: 14px; margin-top: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+    .card h3 { margin: 0 0 6px; font-size: 17px; }
+    .card p { margin: 0; color: var(--muted); font-size: 15px; }
+    section { margin-top: 48px; }
+    h2 { font-size: 26px; letter-spacing: -0.01em; }
+    code { font: 14px ui-monospace, "SF Mono", Menlo, monospace; background: var(--card); padding: 2px 6px; border-radius: 6px; }
+    pre { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; overflow-x: auto; }
+    footer { margin-top: 64px; color: var(--muted); font-size: 14px; text-align: center; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Tepfasonic</h1>
+    <p class="tagline">A free, open-source SSH client and terminal for macOS with a built-in Claude agent.<br>No account. No server. No subscription.</p>
+    <div class="actions">
+      <a class="button primary" href="https://github.com/Edwardrem/Tepfasonic-Client/releases/latest">Download for macOS</a>
+      <a class="button secondary" href="https://github.com/Edwardrem/Tepfasonic-Client">Source on GitHub</a>
+    </div>
+    <p class="note">macOS 15 or later, Apple silicon and Intel. Or <code>brew tap edwardrem/tepfasonic &amp;&amp; brew install --cask tepfasonic</code>.</p>
+  </header>
+
+  <section class="grid">
+    <div class="card"><h3>Everything on your Mac</h3><p>Hosts in a local database, secrets in the Keychain behind Touch ID. Nothing leaves the machine except the SSH connections you make.</p></div>
+    <div class="card"><h3>Terminal you'd expect</h3><p>Tabs, nested splits, true colour, 100 000 lines of scrollback, auto-reconnect after sleep, restored on relaunch.</p></div>
+    <div class="card"><h3>Move between Macs</h3><p>One encrypted <code>.tepfa</code> file carries hosts, keys, snippets and themes. Import from <code>~/.ssh/config</code>, Termius, PuTTY and Tabby.</p></div>
+    <div class="card"><h3>Claude on your servers</h3><p>Bring your own API key, or connect Claude Desktop and Claude Code over MCP. Every command passes your per-host guardrails and lands in an audit log.</p></div>
+  </section>
+
+  <section>
+    <h2>Updates</h2>
+    <p>The app checks <code>appcast.xml</code> on this site once a day. Builds signed with a Developer ID install updates in place through Sparkle; unsigned builds offer the download instead. Enable the beta channel in Settings → Updates to follow pre-releases.</p>
+  </section>
+
+  <section>
+    <h2>Documentation</h2>
+    <ul>
+      <li><a href="docs/">Keyboard shortcuts and getting started</a></li>
+      <li><a href="docs/PLAN.md">Product plan and build order</a></li>
+      <li><a href="schema/">The <code>.tepfa</code> file format</a></li>
+      <li><a href="themes/">Theme gallery</a></li>
+    </ul>
+  </section>
+
+  <footer>MIT licensed. Built by Rufaro Mutepfa and contributors.</footer>
+</main>
+</body>
+</html>

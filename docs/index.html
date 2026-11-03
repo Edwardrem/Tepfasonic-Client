@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tepfasonic Docs</title>
+  <style>
+    :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --card: #f5f5f7; --border: #e5e5ea; --accent: #2a99e6; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #111113; --fg: #f5f5f7; --muted: #a1a1a6; --card: #1c1c1e; --border: #2c2c2e; } }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; }
+    main { max-width: 820px; margin: 0 auto; padding: 40px 16px 80px; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    kbd { font: 13px ui-monospace, "SF Mono", Menlo, monospace; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; }
+    code { font: 14px ui-monospace, "SF Mono", Menlo, monospace; background: var(--card); padding: 2px 6px; border-radius: 6px; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <p><a href="../">← Tepfasonic</a></p>
+  <h1>Getting started</h1>
+  <ol>
+    <li>Press <kbd>⌘N</kbd> to add a host, or type <code>user@host:port</code> in the quick-connect field and press Return to connect without saving.</li>
+    <li>The first connection shows the server's host-key fingerprint. Compare it with what the server administrator gave you before trusting it.</li>
+    <li>Double-click a host to open it in a new tab. Split the tab with <kbd>⌘D</kbd> (right) or <kbd>⇧⌘D</kbd> (down).</li>
+  </ol>
+
+  <h2>Keyboard shortcuts</h2>
+  <table>
+    <tr><th>Action</th><th>Shortcut</th></tr>
+    <tr><td>New host</td><td><kbd>⌘N</kbd></td></tr>
+    <tr><td>New group</td><td><kbd>⇧⌘N</kbd></td></tr>
+    <tr><td>Connect to the selected host</td><td><kbd>⌘↩</kbd></td></tr>
+    <tr><td>New tab (host picker)</td><td><kbd>⌘T</kbd></td></tr>
+    <tr><td>Search hosts, snippets, identities and history</td><td><kbd>⌘K</kbd></td></tr>
+    <tr><td>Split right / down</td><td><kbd>⌘D</kbd> / <kbd>⇧⌘D</kbd></td></tr>
+    <tr><td>Move focus between panes</td><td><kbd>⌘←</kbd> <kbd>⌘→</kbd> <kbd>⌘↑</kbd> <kbd>⌘↓</kbd></td></tr>
+    <tr><td>Close pane / close tab</td><td><kbd>⌘W</kbd> / <kbd>⇧⌘W</kbd></td></tr>
+    <tr><td>Previous / next tab</td><td><kbd>⇧⌘[</kbd> / <kbd>⇧⌘]</kbd></td></tr>
+    <tr><td>Jump to tab 1–9</td><td><kbd>⌘1</kbd> … <kbd>⌘9</kbd></td></tr>
+    <tr><td>Reconnect / disconnect</td><td><kbd>⇧⌘R</kbd> / <kbd>⌥⌘D</kbd></td></tr>
+    <tr><td>Check for updates</td><td>Tepfasonic menu → Check for Updates…</td></tr>
+  </table>
+
+  <h2>Where things live</h2>
+  <p>Hosts, groups and identities: <code>~/Library/Application Support/Tepfasonic/Tepfasonic.store</code>. Trusted host keys: <code>known_hosts.json</code> in the same folder. Open tabs: <code>workspace.json</code>. Private keys and passwords: the macOS Keychain.</p>
+</main>
+</body>
+</html>
