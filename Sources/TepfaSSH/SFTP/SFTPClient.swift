@@ -121,8 +121,8 @@ public final class SFTPClient: @unchecked Sendable {
     // MARK: Metadata
 
     public func realPath(_ path: String) async throws -> String {
-        let (type, reader) = try await request(.realpath) { $0.writeString(path) }
-        var reader = reader
+        let (type, reply) = try await request(.realpath) { $0.writeString(path) }
+        var reader = reply
         switch type {
         case .name:
             _ = try reader.readUInt32()
@@ -134,23 +134,23 @@ public final class SFTPClient: @unchecked Sendable {
     }
 
     public func stat(_ path: String) async throws -> SFTP.Attributes {
-        let (type, reader) = try await request(.stat) { $0.writeString(path) }
-        var reader = reader
+        let (type, reply) = try await request(.stat) { $0.writeString(path) }
+        var reader = reply
         return try expectAttributes(type, &reader, path: path)
     }
 
     public func lstat(_ path: String) async throws -> SFTP.Attributes {
-        let (type, reader) = try await request(.lstat) { $0.writeString(path) }
-        var reader = reader
+        let (type, reply) = try await request(.lstat) { $0.writeString(path) }
+        var reader = reply
         return try expectAttributes(type, &reader, path: path)
     }
 
     public func setAttributes(_ attributes: SFTP.Attributes, path: String) async throws {
-        let (type, reader) = try await request(.setstat) { writer in
+        let (type, reply) = try await request(.setstat) { writer in
             writer.writeString(path)
             attributes.encode(into: &writer)
         }
-        var reader = reader
+        var reader = reply
         _ = try expectStatus(type, &reader, path: path)
     }
 
@@ -159,8 +159,8 @@ public final class SFTPClient: @unchecked Sendable {
     }
 
     public func readLink(_ path: String) async throws -> String {
-        let (type, reader) = try await request(.readlink) { $0.writeString(path) }
-        var reader = reader
+        let (type, reply) = try await request(.readlink) { $0.writeString(path) }
+        var reader = reply
         guard type == .name else {
             _ = try expectStatus(type, &reader, path: path)
             throw SFTP.Error.protocolError("status instead of name")
@@ -171,25 +171,25 @@ public final class SFTPClient: @unchecked Sendable {
 
     public func symlink(target: String, at path: String) async throws {
         // OpenSSH reverses the documented argument order; it is what every client sends.
-        let (type, reader) = try await request(.symlink) { writer in
+        let (type, reply) = try await request(.symlink) { writer in
             writer.writeString(target)
             writer.writeString(path)
         }
-        var reader = reader
+        var reader = reply
         _ = try expectStatus(type, &reader, path: path)
     }
 
     // MARK: Directories
 
     public func listDirectory(_ path: String) async throws -> [SFTP.Entry] {
-        let (openType, openReader) = try await request(.opendir) { $0.writeString(path) }
-        var openReader = openReader
+        let (openType, openReply) = try await request(.opendir) { $0.writeString(path) }
+        var openReader = openReply
         let handle = try expectHandle(openType, &openReader, path: path)
         var entries: [SFTP.Entry] = []
         defer { Task { try? await self.closeHandle(handle) } }
         while true {
-            let (type, reader) = try await request(.readdir) { $0.writeBytes(handle) }
-            var reader = reader
+            let (type, reply) = try await request(.readdir) { $0.writeBytes(handle) }
+            var reader = reply
             if type == .status {
                 _ = try expectStatus(type, &reader, path: path, allowEOF: true)
                 break
@@ -208,32 +208,32 @@ public final class SFTPClient: @unchecked Sendable {
     }
 
     public func makeDirectory(_ path: String, mode: UInt32? = nil) async throws {
-        let (type, reader) = try await request(.mkdir) { writer in
+        let (type, reply) = try await request(.mkdir) { writer in
             writer.writeString(path)
             SFTP.Attributes(permissions: mode).encode(into: &writer)
         }
-        var reader = reader
+        var reader = reply
         _ = try expectStatus(type, &reader, path: path)
     }
 
     public func removeDirectory(_ path: String) async throws {
-        let (type, reader) = try await request(.rmdir) { $0.writeString(path) }
-        var reader = reader
+        let (type, reply) = try await request(.rmdir) { $0.writeString(path) }
+        var reader = reply
         _ = try expectStatus(type, &reader, path: path)
     }
 
     public func remove(_ path: String) async throws {
-        let (type, reader) = try await request(.remove) { $0.writeString(path) }
-        var reader = reader
+        let (type, reply) = try await request(.remove) { $0.writeString(path) }
+        var reader = reply
         _ = try expectStatus(type, &reader, path: path)
     }
 
     public func rename(_ path: String, to newPath: String) async throws {
-        let (type, reader) = try await request(.rename) { writer in
+        let (type, reply) = try await request(.rename) { writer in
             writer.writeString(path)
             writer.writeString(newPath)
         }
-        var reader = reader
+        var reader = reply
         _ = try expectStatus(type, &reader, path: path)
     }
 
@@ -254,29 +254,29 @@ public final class SFTPClient: @unchecked Sendable {
     // MARK: Files
 
     public func openFile(_ path: String, flags: SFTP.OpenFlags, mode: UInt32? = nil) async throws -> [UInt8] {
-        let (type, reader) = try await request(.open) { writer in
+        let (type, reply) = try await request(.open) { writer in
             writer.writeString(path)
             writer.writeUInt32(flags.rawValue)
             SFTP.Attributes(permissions: mode).encode(into: &writer)
         }
-        var reader = reader
+        var reader = reply
         return try expectHandle(type, &reader, path: path)
     }
 
     public func closeHandle(_ handle: [UInt8]) async throws {
-        let (type, reader) = try await request(.close) { $0.writeBytes(handle) }
-        var reader = reader
+        let (type, reply) = try await request(.close) { $0.writeBytes(handle) }
+        var reader = reply
         _ = try expectStatus(type, &reader, path: nil)
     }
 
     /// Reads up to `length` bytes; empty at end of file.
     public func read(handle: [UInt8], offset: UInt64, length: Int) async throws -> [UInt8] {
-        let (type, reader) = try await request(.read) { writer in
+        let (type, reply) = try await request(.read) { writer in
             writer.writeBytes(handle)
             writer.writeUInt64(offset)
             writer.writeUInt32(UInt32(length))
         }
-        var reader = reader
+        var reader = reply
         switch type {
         case .data: return try reader.readBytes()
         case .status:
@@ -287,12 +287,12 @@ public final class SFTPClient: @unchecked Sendable {
     }
 
     public func write(handle: [UInt8], offset: UInt64, data: [UInt8]) async throws {
-        let (type, reader) = try await request(.write) { writer in
+        let (type, reply) = try await request(.write) { writer in
             writer.writeBytes(handle)
             writer.writeUInt64(offset)
             writer.writeBytes(data)
         }
-        var reader = reader
+        var reader = reply
         _ = try expectStatus(type, &reader, path: nil)
     }
 

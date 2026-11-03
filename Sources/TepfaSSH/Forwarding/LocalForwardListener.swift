@@ -111,11 +111,18 @@ final class LocalForwardAcceptHandler: ChannelInboundHandler, RemovableChannelHa
 /// Shared plumbing: opens the direct-tcpip channel, installs a glue pair, and
 /// starts reading on the local socket.
 enum ForwardGlue {
+    /// The accept handler only ever touches its own pipeline on the local
+    /// loop, so carrying it into the task is safe.
+    private struct HandlerBox: @unchecked Sendable {
+        let handler: any RemovableChannelHandler
+    }
+
     static func connect(local: Channel, through connection: SSHConnection, to host: String, port: Int, counters: ForwardCounters, acceptHandler: (any RemovableChannelHandler)?, replay: ByteBuffer? = nil) {
         let (localGlue, remoteGlue) = GlueHandler.matchedPair(
             firstBytes: { counters.addSent($0) },
             secondBytes: { counters.addReceived($0) })
         let originator = local.remoteAddress
+        let acceptHandler = acceptHandler.map(HandlerBox.init)
         Task {
             do {
                 let remote = try await connection.openDirectTCPIP(targetHost: host, targetPort: port, originator: originator) { child in
@@ -129,7 +136,7 @@ enum ForwardGlue {
                     do {
                         try local.pipeline.syncOperations.addHandler(localGlue)
                         if let acceptHandler {
-                            local.pipeline.syncOperations.removeHandler(acceptHandler, promise: nil)
+                            local.pipeline.syncOperations.removeHandler(acceptHandler.handler, promise: nil)
                         }
                     } catch {
                         local.close(promise: nil)

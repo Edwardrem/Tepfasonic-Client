@@ -19,10 +19,16 @@ final class GlueHandler: ChannelDuplexHandler, @unchecked Sendable {
     /// Called on the handler's loop with the number of bytes read on this side.
     private let onBytes: (@Sendable (Int) -> Void)?
 
+    /// The handler's context and loop. The context is only ever used on its
+    /// own loop (see `onLoop`), which is what makes sharing it safe.
+    private struct Attachment: @unchecked Sendable {
+        let context: ChannelHandlerContext
+        let loop: EventLoop
+    }
+
     private struct State {
         weak var partner: GlueHandler?
-        var context: ChannelHandlerContext?
-        var loop: EventLoop?
+        var attachment: Attachment?
         var pendingRead = false
         var writable = true
     }
@@ -49,16 +55,17 @@ final class GlueHandler: ChannelDuplexHandler, @unchecked Sendable {
     // MARK: Pipeline
 
     func handlerAdded(context: ChannelHandlerContext) {
+        let attachment = Attachment(context: context, loop: context.eventLoop)
+        let writable = context.channel.isWritable
         state.withLock {
-            $0.context = context
-            $0.loop = context.eventLoop
-            $0.writable = context.channel.isWritable
+            $0.attachment = attachment
+            $0.writable = writable
         }
     }
 
     func handlerRemoved(context: ChannelHandlerContext) {
         state.withLock {
-            $0.context = nil
+            $0.attachment = nil
             $0.partner = nil
         }
     }
@@ -113,15 +120,14 @@ final class GlueHandler: ChannelDuplexHandler, @unchecked Sendable {
 
     // MARK: Partner calls (hop to our own loop)
 
-    private var isWritable: Bool { state.withLock { $0.writable && $0.context != nil } }
+    private var isWritable: Bool { state.withLock { $0.writable && $0.attachment != nil } }
 
     private func onLoop(_ body: @escaping @Sendable (ChannelHandlerContext) -> Void) {
-        let (context, loop) = state.withLock { ($0.context, $0.loop) }
-        guard let context, let loop else { return }
-        if loop.inEventLoop {
-            body(context)
+        guard let attachment = state.withLock({ $0.attachment }) else { return }
+        if attachment.loop.inEventLoop {
+            body(attachment.context)
         } else {
-            loop.execute { body(context) }
+            attachment.loop.execute { body(attachment.context) }
         }
     }
 

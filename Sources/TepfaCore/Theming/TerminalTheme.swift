@@ -57,7 +57,7 @@ public struct TerminalTheme: Codable, Sendable, Hashable, Identifiable {
             throw DecodingError.dataCorruptedError(forKey: .ansi, in: container, debugDescription: "a theme needs 16 ANSI colours, got \(colors.count)")
         }
         ansi = colors
-        isDark = try container.decodeIfPresent(Bool.self, forKey: .isDark) ?? Self.luminance(background) < 0.5
+        isDark = try container.decodeIfPresent(Bool.self, forKey: .isDark) ?? (Self.luminance(background) < 0.5)
         for value in [foreground, background, cursor, selection] + ansi + [bold, cursorText, selectionText].compactMap({ $0 }) where Self.rgb(value) == nil {
             throw DecodingError.dataCorruptedError(forKey: .ansi, in: container, debugDescription: "\(value) is not a #RRGGBB colour")
         }

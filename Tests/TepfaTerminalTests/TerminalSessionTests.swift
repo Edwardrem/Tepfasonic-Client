@@ -9,6 +9,13 @@ import TepfaSSH
 final class CollectingSink: TerminalSink {
     private(set) var bytes: [UInt8] = []
     var text: String { String(decoding: bytes, as: UTF8.self) }
+    /// The text without line breaks and escape sequences, for matching typed
+    /// lines the shell may have wrapped or redrawn.
+    var plainText: String {
+        text.replacingOccurrences(of: #"\u{1b}\[[0-9;?]*[ -/]*[@-~]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+    }
     func feed(_ bytes: ArraySlice<UInt8>) { self.bytes.append(contentsOf: bytes) }
 }
 
@@ -267,9 +274,12 @@ struct ShellIntegrationLiveTests {
         #expect(recorder.records.count == 2)
         #expect(!recorder.records.contains { $0.command.contains("hunter2") })
 
-        // Keystrokes the tty echoes are recorded once Enter arrives.
+        // Keystrokes the tty echoes are recorded once Enter arrives. A wide
+        // terminal keeps the shell from wrapping the echoed line mid-word.
+        session.resize(cols: 200, rows: 40)
+        try? await Task.sleep(for: .milliseconds(200))
         for character in "echo typed-$((2+2))" { session.send(text: String(character)) }
-        try await waitUntil("echo of the typed text") { sink.text.contains("echo typed-$((2+2))") }
+        try await waitUntil("echo of the typed text") { sink.plainText.contains("echo typed-$((2+2))") }
         session.send(text: "\r")
         try await waitUntil("typed command recorded") { recorder.records.count == 3 }
         #expect(recorder.records[2].command == "echo typed-$((2+2))")

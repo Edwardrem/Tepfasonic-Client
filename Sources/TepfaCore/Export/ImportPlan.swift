@@ -334,10 +334,6 @@ public struct ImportPlan {
             host.group = try record.groupID.flatMap { try Self.group($0, in: context) }
             host.identity = try record.identityID.flatMap { try Self.identity($0, in: context) }
             host.defaultSnippet = try record.defaultSnippetID.flatMap { try Self.snippet($0, in: context) }
-            if host.identity == nil, host.authMethod == .privateKey, host.group?.defaultIdentity == nil {
-                // The identity was not imported; fall back to asking for a password.
-                host.authMethod = .password
-            }
             if let inherits = record.inheritsGroupJumpHost { host.inheritsGroupJumpHost = inherits }
             if let inherits = record.inheritsGroupProxy { host.inheritsGroupProxy = inherits }
             host.themeID = record.themeID
@@ -361,6 +357,13 @@ public struct ImportPlan {
             guard let group = try Self.group(record.id, in: context) else { continue }
             group.defaultIdentity = try record.defaultIdentityID.flatMap { try Self.identity($0, in: context) }
             group.defaultJumpHost = try record.defaultJumpHostID.flatMap { try Self.host($0, in: context) }
+        }
+        for record in document.hosts where action(.host, record.id.uuidString) != .skip {
+            guard let host = try Self.host(record.id, in: context) else { continue }
+            if host.identity == nil, host.authMethod == .privateKey, host.group?.defaultIdentity == nil {
+                // Neither the host's identity nor a group default was imported; ask for a password instead.
+                host.authMethod = .password
+            }
         }
 
         for record in document.portForwards {

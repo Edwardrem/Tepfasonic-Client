@@ -5,12 +5,14 @@ import TepfaCore
 @testable import TepfaTerminal
 
 @Suite @MainActor struct HostDescriptorChainTests {
-    private func makeContext() throws -> ModelContext {
-        try ModelContainer(for: Schema(TepfaSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]).mainContext
+    /// The container must outlive the context, so callers keep it.
+    private func makeContainer() throws -> ModelContainer {
+        try ModelContainer(for: Schema(TepfaSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
     @Test func jumpChainIsOrderedOutermostFirstAndCyclesAreBroken() throws {
-        let context = try makeContext()
+        let container = try makeContainer()
+        let context = container.mainContext
         let outer = SSHHost(name: "outer", hostname: "o", username: "a")
         let inner = SSHHost(name: "inner", hostname: "i", username: "b")
         let target = SSHHost(name: "target", hostname: "t", username: "c")
@@ -28,7 +30,8 @@ import TepfaCore
     }
 
     @Test func groupDefaultsApplyUnlessOverridden() throws {
-        let context = try makeContext()
+        let container = try makeContainer()
+        let context = container.mainContext
         let identity = Identity(name: "ops", username: "ops", credentialKind: .keychainKey)
         let bastion = SSHHost(name: "bastion", hostname: "b", username: "j")
         let group = HostGroup(name: "G")
@@ -61,7 +64,8 @@ import TepfaCore
     }
 
     @Test func descriptorsEncodeTheirChainAndSerialSettings() throws {
-        let context = try makeContext()
+        let container = try makeContainer()
+        let context = container.mainContext
         let profile = SerialProfile(name: "console", devicePath: "/dev/cu.usbserial-1", baudRate: 9600)
         context.insert(profile)
         let serial = HostDescriptor(profile)

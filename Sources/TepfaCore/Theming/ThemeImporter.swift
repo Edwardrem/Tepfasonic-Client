@@ -32,7 +32,9 @@ public enum ThemeImporter {
             if trimmed.hasPrefix("<?xml") || trimmed.hasPrefix("<plist") || fileName.lowercased().hasSuffix(".itermcolors") {
                 return try iTerm2(data, name: fallbackName)
             }
-            if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") {
+            // VS Code themes may start with a comment; look past it.
+            let jsonCandidate = stripJSONComments(trimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+            if jsonCandidate.hasPrefix("{") || jsonCandidate.hasPrefix("[") {
                 return try json(data, name: fallbackName)
             }
             if let theme = try? ghostty(text, name: fallbackName) { return theme }

@@ -291,7 +291,7 @@ struct PendingThemeInstall: Identifiable {
 
 /// Monospace fonts available to the terminal, including the bundled JetBrains Mono.
 enum FontCatalog {
-    private static var registered = false
+    nonisolated(unsafe) private static var registered = false
 
     /// Registers fonts shipped in the app bundle's `Fonts` folder (process scope).
     static func registerBundledFonts() {

@@ -183,7 +183,7 @@ struct ThemeEditorView: View {
         }
     }
 
-    static func hex(from color: Color) -> String {
+    static func hex(from color: SwiftUI.Color) -> String {
         let ns = NSColor(color).usingColorSpace(.sRGB) ?? .black
         return TerminalTheme.hex(r: ns.redComponent, g: ns.greenComponent, b: ns.blueComponent)
     }

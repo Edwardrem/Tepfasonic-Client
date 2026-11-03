@@ -9,8 +9,10 @@ move between Macs as an encrypted `.tepfa` file. The full plan is in
 list, tabs and splits, CI with Sparkle updates, Keychain vault with Touch ID
 and key management, snippets and history, export/import, Claude agent panel
 and MCP server, port forwarding, SFTP, serial consoles and cloud imports), plus
-jump hosts, proxies and theming. Nothing is released yet; see "Known limits"
-for what the libraries underneath cannot do.
+jump hosts, proxies and theming. Builds are published on the
+[download page](https://edwardrem.github.io/Tepfasonic-Client/download/) and
+[GitHub Releases](https://github.com/Edwardrem/Tepfasonic-Client/releases);
+see "Known limits" for what the libraries underneath cannot do.
 
 ## What works today
 
@@ -165,7 +167,16 @@ open .build/DerivedData/Build/Products/Debug/Tepfasonic.app
 ```
 
 Builds are ad-hoc signed until a Developer ID certificate is available, so
-Gatekeeper will complain about copies you give to other people.
+Gatekeeper asks for a right-click → Open the first time (or
+`xattr -dr com.apple.quarantine /Applications/Tepfasonic.app`).
+
+## Installing a release
+
+Download the `.dmg` from the [download page](https://edwardrem.github.io/Tepfasonic-Client/download/)
+or from [GitHub Releases](https://github.com/Edwardrem/Tepfasonic-Client/releases),
+drag the app to Applications and open it once with right-click → Open. Every
+release also ships a `.zip` for the in-app updater and a `SHA256SUMS` file.
+Releases are cut by pushing a `vX.Y.Z` tag; see [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Repository layout
 
@@ -180,7 +191,7 @@ Gatekeeper will complain about copies you give to other people.
 | `App/Tepfasonic` | The SwiftUI app: sidebar, editors, workspace, Identities & Keys, Files (SFTP), Theme Editor, settings, prompts, updater; `Fonts/` holds JetBrains Mono (OFL) |
 | `Tests/` | Unit tests plus opt-in live tests against a real sshd |
 | `project.yml` | XcodeGen spec for the app target |
-| `site/` | The GitHub Pages site: landing page, docs, `.tepfa` schema reference, theme gallery |
+| `site/` | The GitHub Pages site: landing page, download and release pages (filled from the GitHub Releases API), docs, `.tepfa` schema reference, theme gallery |
 | `docs/PLAN.md` | The product and build plan |
 
 ## Testing

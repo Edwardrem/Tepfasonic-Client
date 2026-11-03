@@ -68,11 +68,11 @@ public enum AWSSigV4 {
 
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let path = components?.percentEncodedPath.isEmpty == false ? components!.percentEncodedPath : "/"
-        let query = (components?.queryItems ?? [])
-            .map { (encode($0.name), encode($0.value ?? "")) }
-            .sorted { $0.0 == $1.0 ? $0.1 < $1.1 : $0.0 < $1.0 }
-            .map { "\($0.0)=\($0.1)" }
-            .joined(separator: "&")
+        var pairs: [(String, String)] = (components?.queryItems ?? []).map { item in
+            (encode(item.name), encode(item.value ?? ""))
+        }
+        pairs.sort { lhs, rhs in lhs.0 == rhs.0 ? lhs.1 < rhs.1 : lhs.0 < rhs.0 }
+        let query = pairs.map { pair in "\(pair.0)=\(pair.1)" }.joined(separator: "&")
 
         let canonicalRequest = [method, path, query, canonicalHeaders, signedHeaders, payloadHash].joined(separator: "\n")
         let scope = "\(dateStamp)/\(region)/\(service)/aws4_request"

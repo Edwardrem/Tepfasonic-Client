@@ -12,10 +12,10 @@ import Testing
             for hex in theme.ansi + [theme.foreground, theme.background, theme.cursor, theme.selection] {
                 #expect(TerminalTheme.rgb(hex) != nil, "\(theme.name): \(hex)")
             }
-            #expect(theme.isDark == (TerminalTheme.luminance(theme.background) < 0.5), theme.name)
+            #expect(theme.isDark == (TerminalTheme.luminance(theme.background) < 0.5), Comment(rawValue: theme.name))
             let data = try theme.encodedJSON()
             #expect(try TerminalTheme.decode(data) == theme)
-            #expect(TerminalTheme.contrast(theme.foreground, theme.background) >= 3.5, theme.name)
+            #expect(TerminalTheme.contrast(theme.foreground, theme.background) >= 3.5, Comment(rawValue: theme.name))
         }
         #expect(TerminalTheme.bundled.count >= 12)
     }

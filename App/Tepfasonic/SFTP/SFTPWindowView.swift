@@ -114,18 +114,8 @@ final class SFTPWindowModel {
     private func enqueueUpload(_ item: FileItem, hostID: UUID, into directory: String) async {
         let hostName = connections.hostName(hostID)
         if item.isDirectory {
-            guard let enumerator = FileManager.default.enumerator(at: URL(fileURLWithPath: item.path), includingPropertiesForKeys: [.isDirectoryKey]) else { return }
             let remoteRoot = SFTP.join(directory, item.name)
-            var directories = [remoteRoot]
-            var files: [(URL, String)] = []
-            for case let url as URL in enumerator {
-                let relative = url.path.dropFirst(item.path.count).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-                    directories.append(SFTP.join(remoteRoot, relative))
-                } else {
-                    files.append((url, SFTP.join(remoteRoot, relative)))
-                }
-            }
+            guard let (directories, files) = Self.localTree(at: item.path, remoteRoot: remoteRoot) else { return }
             do {
                 let client = try await connections.client(for: hostID)
                 for path in directories {
@@ -141,6 +131,23 @@ final class SFTPWindowModel {
         } else {
             queue.enqueueUpload(hostID: hostID, hostName: hostName, localURL: URL(fileURLWithPath: item.path), to: SFTP.join(directory, item.name))
         }
+    }
+
+    /// Every folder and file under `path`, with the remote path each maps to.
+    /// Synchronous because directory enumerators cannot be iterated from async code.
+    private nonisolated static func localTree(at path: String, remoteRoot: String) -> (directories: [String], files: [(URL, String)])? {
+        guard let enumerator = FileManager.default.enumerator(at: URL(fileURLWithPath: path), includingPropertiesForKeys: [.isDirectoryKey]) else { return nil }
+        var directories = [remoteRoot]
+        var files: [(URL, String)] = []
+        for case let url as URL in enumerator {
+            let relative = url.path.dropFirst(path.count).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                directories.append(SFTP.join(remoteRoot, relative))
+            } else {
+                files.append((url, SFTP.join(remoteRoot, relative)))
+            }
+        }
+        return (directories, files)
     }
 
     private func enqueueDownload(_ item: FileItem, hostID: UUID, into directory: URL) async {

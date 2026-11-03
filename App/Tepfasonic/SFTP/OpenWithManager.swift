@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import TepfaCore
 import TepfaSSH
 
 /// "Open with" for remote files: downloads to a scratch folder, opens the
@@ -137,7 +138,7 @@ final class OpenWithManager {
 /// Scratch folder for open-with copies (outside `TepfaCore` so it can stay app-specific).
 enum AppPathsBridge {
     static var openWithDirectory: URL {
-        let url = TepfaCore.AppPaths.applicationSupport.appending(path: "OpenWith", directoryHint: .isDirectory)
+        let url = AppPaths.applicationSupport.appending(path: "OpenWith", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }

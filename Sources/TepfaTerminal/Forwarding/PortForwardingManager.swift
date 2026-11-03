@@ -25,13 +25,13 @@ public final class ActiveForward: Identifiable {
     }
 
     public let rule: PortForwardDescriptor
-    public var id: UUID { rule.id }
+    nonisolated public var id: UUID { rule.id }
     public private(set) var status: Status = .starting
     public private(set) var stats = ForwardCounters.Snapshot()
     public private(set) var startedAt = Date.now
 
     /// The host's current connection, read by the listeners from event loops.
-    let connectionBox = Mutex<SSHConnection?>(nil)
+    let connectionBox = ConnectionSlot()
     var local: LocalForwardListener?
     var dynamic: DynamicForwardListener?
     var remote: RemoteForwardBinding?
@@ -147,8 +147,8 @@ public final class PortForwardingManager {
     private func launch(_ forward: ActiveForward) async {
         let rule = forward.rule
         let box = forward.connectionBox
-        let provider: SSHConnectionProvider = { box.withLock { $0 } }
-        box.withLock { $0 = session(for: rule.hostID)?.activeConnection }
+        let provider: SSHConnectionProvider = { box.value }
+        box.set(session(for: rule.hostID)?.activeConnection)
         do {
             switch rule.kind {
             case .local:
@@ -156,17 +156,17 @@ public final class PortForwardingManager {
                 forward.local = listener
                 let port = try await listener.start()
                 guard active[rule.id] === forward else { await listener.stop(); return }
-                forward.set(box.withLock { $0 } == nil ? .waitingForHost : .active(port: port))
+                forward.set(box.value == nil ? .waitingForHost : .active(port: port))
             case .dynamic:
                 let listener = DynamicForwardListener(bindAddress: rule.effectiveBindAddress, port: rule.bindPort, provider: provider)
                 forward.dynamic = listener
                 let port = try await listener.start()
                 guard active[rule.id] === forward else { await listener.stop(); return }
-                forward.set(box.withLock { $0 } == nil ? .waitingForHost : .active(port: port))
+                forward.set(box.value == nil ? .waitingForHost : .active(port: port))
             case .remote:
                 let binding = RemoteForwardBinding(bindAddress: rule.effectiveBindAddress, port: rule.bindPort, targetHost: rule.targetHost, targetPort: rule.targetPort)
                 forward.remote = binding
-                if let connection = box.withLock({ $0 }) {
+                if let connection = box.value {
                     try await bindRemote(forward, on: connection)
                 } else {
                     forward.set(.waitingForHost)
@@ -191,11 +191,7 @@ public final class PortForwardingManager {
         for forward in active.values {
             let session = session(for: forward.rule.hostID)
             let connection = session?.activeConnection
-            let previous = forward.connectionBox.withLock { current -> SSHConnection? in
-                let old = current
-                current = connection
-                return old
-            }
+            let previous = forward.connectionBox.replace(with: connection)
             let changed = previous !== connection
             switch forward.rule.kind {
             case .local, .dynamic:
@@ -237,6 +233,26 @@ public final class PortForwardingManager {
         autoStartFailed = autoStartFailed.filter { id in
             guard let rule = rules.first(where: { $0.id == id }), let hostID = rule.hostID else { return false }
             return connectedHosts.contains(hostID)
+        }
+    }
+}
+
+/// A reference-typed slot for the connection listeners read from their event loops.
+final class ConnectionSlot: Sendable {
+    private let storage = Mutex<SSHConnection?>(nil)
+
+    var value: SSHConnection? { storage.withLock { $0 } }
+
+    func set(_ connection: SSHConnection?) {
+        storage.withLock { $0 = connection }
+    }
+
+    /// Stores `connection` and returns what was there before.
+    func replace(with connection: SSHConnection?) -> SSHConnection? {
+        storage.withLock { current in
+            let old = current
+            current = connection
+            return old
         }
     }
 }

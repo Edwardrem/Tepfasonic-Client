@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download Tepfasonic</title>
+  <meta name="description" content="Download Tepfasonic for macOS: the free, open-source SSH client with a built-in Claude agent.">
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+<main>
+  <nav class="top">
+    <a href="../">Tepfasonic</a>
+    <a class="current" href="./">Download</a>
+    <a href="../releases/">Releases</a>
+    <a href="../docs/">Docs</a>
+    <a href="../themes/">Themes</a>
+    <a href="https://github.com/Edwardrem/Tepfasonic-Client">GitHub</a>
+  </nav>
+
+  <h1>Download Tepfasonic</h1>
+  <p class="tagline">A disk image for macOS 15 or later, Apple silicon and Intel.</p>
+  <div class="actions">
+    <a class="button primary" data-download-latest href="https://github.com/Edwardrem/Tepfasonic-Client/releases/latest">Download the DMG</a>
+    <a class="button secondary" href="../releases/">All releases</a>
+    <a class="hidden" data-latest-sums href="#">SHA256SUMS</a>
+  </div>
+  <p class="note"><span data-latest-version>Latest release</span> · published on <a href="https://github.com/Edwardrem/Tepfasonic-Client/releases">GitHub Releases</a>.</p>
+
+  <h2>Install</h2>
+  <ol>
+    <li>Open the <code>.dmg</code> and drag <strong>Tepfasonic</strong> to <strong>Applications</strong>.</li>
+    <li>Builds are not yet signed with an Apple Developer ID, so the first launch needs one extra step: right-click the app and choose <strong>Open</strong>, then confirm. Or run
+      <pre><code>xattr -dr com.apple.quarantine /Applications/Tepfasonic.app</code></pre>
+      Once Developer ID signing is in place this step goes away and updates install in place.</li>
+    <li>Launch it, press <kbd>⌘N</kbd> to add a host or type <code>user@host</code> in the quick-connect field.</li>
+  </ol>
+
+  <h2>Homebrew</h2>
+  <pre><code>brew tap edwardrem/tepfasonic
+brew install --cask tepfasonic</code></pre>
+  <p class="note">The cask is bumped by the release workflow once the tap repository exists; until then use the DMG.</p>
+
+  <h2>Verify the download</h2>
+  <p>Every release ships a <code>SHA256SUMS</code> file. Compare it with the image you downloaded:</p>
+  <pre><code>shasum -a 256 ~/Downloads/Tepfasonic-*.dmg</code></pre>
+
+  <h2>Updates</h2>
+  <p>The app checks this site's <code>appcast.xml</code> once a day (Settings → Updates). Unsigned builds offer the download; signed builds update in place through Sparkle. Turn on the beta channel to follow pre-releases.</p>
+
+  <h2>Build it yourself</h2>
+  <pre><code>git clone https://github.com/Edwardrem/Tepfasonic-Client.git
+cd Tepfasonic-Client
+brew install xcodegen && xcodegen generate
+xcodebuild -project Tepfasonic.xcodeproj -scheme Tepfasonic -configuration Release \
+  -skipPackagePluginValidation -skipMacroValidation build</code></pre>
+
+  <footer>MIT licensed. Built by Rufaro Mutepfa and contributors.</footer>
+</main>
+<script src="../site.js"></script>
+</body>
+</html>

@@ -22,6 +22,18 @@
 				<string>com.tepfasonic.tepfa</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>iTerm2 Color Scheme</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.googlecode.iterm2.itermcolors</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
@@ -90,6 +102,26 @@
 				<key>public.mime-type</key>
 				<array>
 					<string>application/vnd.tepfasonic.tepfa+json</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.property-list</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>iTerm2 Color Scheme</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.googlecode.iterm2.itermcolors</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>itermcolors</string>
 				</array>
 			</dict>
 		</dict>
