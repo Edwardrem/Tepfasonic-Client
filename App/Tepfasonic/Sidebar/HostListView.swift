@@ -12,6 +12,7 @@ struct HostListView: View {
     @Environment(\.openWindow) private var openWindow
     @Query(sort: [SortDescriptor(\HostGroup.sortOrder), SortDescriptor(\HostGroup.name)]) private var groups: [HostGroup]
     @Query(sort: [SortDescriptor(\SSHHost.sortOrder), SortDescriptor(\SSHHost.name)]) private var hosts: [SSHHost]
+    @Query(sort: [SortDescriptor(\SerialProfile.sortOrder), SortDescriptor(\SerialProfile.name)]) private var serialProfiles: [SerialProfile]
 
     var body: some View {
         List(selection: $selection) {
@@ -36,7 +37,27 @@ struct HostListView: View {
                         Text(group.name)
                     }
                     .contextMenu {
+                        Button("Edit Group…") { appState.groupEditor = group }
+                        Button("Connect to All") {
+                            for host in hosts.filter({ $0.group?.uuid == group.uuid }) { connect(host) }
+                        }
+                        Divider()
                         Button("Delete Group", role: .destructive) { delete(group) }
+                    }
+                }
+            }
+            if !serialProfiles.isEmpty {
+                Section("Serial consoles") {
+                    ForEach(serialProfiles) { profile in
+                        SerialProfileRow(profile: profile, sessions: workspace.sessions(forHost: profile.uuid))
+                            .tag(profile.uuid)
+                            .simultaneousGesture(TapGesture(count: 2).onEnded { open(profile) })
+                            .contextMenu {
+                                Button("Open") { open(profile) }
+                                Button("Edit…") { appState.serialProfileEditor = .edit(profile) }
+                                Divider()
+                                Button("Delete", role: .destructive) { delete(profile) }
+                            }
                     }
                 }
             }
@@ -44,7 +65,7 @@ struct HostListView: View {
         .listStyle(.sidebar)
         .navigationTitle("Hosts")
         .overlay {
-            if hosts.isEmpty {
+            if hosts.isEmpty, serialProfiles.isEmpty {
                 ContentUnavailableView(
                     "No Hosts",
                     systemImage: "server.rack",
@@ -78,6 +99,14 @@ struct HostListView: View {
                 Button("Connect in New Window") {
                     host.lastConnectedAt = .now
                     openWindow(id: "session", value: host.uuid)
+                }
+                Button("Browse Files (SFTP)") {
+                    appState.sftpHostID = host.uuid
+                    openWindow(id: "sftp")
+                }
+                Button("Port Forwarding…") {
+                    selection = host.uuid
+                    appState.sidebarMode = .ports
                 }
                 Divider()
                 Button("Edit…") { appState.hostEditor = .edit(host) }
@@ -114,6 +143,22 @@ struct HostListView: View {
             autoReconnect: host.autoReconnect,
             group: host.group,
             identity: host.identity)
+        copy.jumpHost = host.jumpHost
+        copy.inheritsGroupJumpHost = host.inheritsGroupJumpHost
+        copy.proxyKindRaw = host.proxyKindRaw
+        copy.proxyHost = host.proxyHost
+        copy.proxyPort = host.proxyPort
+        copy.proxyUsername = host.proxyUsername
+        copy.inheritsGroupProxy = host.inheritsGroupProxy
+        copy.themeID = host.themeID
+        copy.fontName = host.fontName
+        copy.fontSize = host.fontSize
+        copy.backgroundTint = host.backgroundTint
+        copy.watermark = host.watermark
+        copy.defaultSnippet = host.defaultSnippet
+        copy.shellIntegration = host.shellIntegration
+        copy.agentPermission = host.agentPermission
+        copy.agentAllowlist = host.agentAllowlist
         modelContext.insert(copy)
         selection = copy.uuid
     }
@@ -131,6 +176,50 @@ struct HostListView: View {
     private func delete(_ group: HostGroup) {
         // Hosts are kept (relationship is nullify) and move back to "Hosts".
         modelContext.delete(group)
+    }
+
+    private func open(_ profile: SerialProfile) {
+        profile.lastConnectedAt = .now
+        workspace.openTab(host: HostDescriptor(profile))
+    }
+
+    private func delete(_ profile: SerialProfile) {
+        for session in workspace.sessions(forHost: profile.uuid) {
+            if let tab = workspace.tab(containingSession: session.id), let leaf = tab.tree.leafID(ofSession: session.id) {
+                workspace.closePane(leafID: leaf, inTab: tab.id)
+            }
+        }
+        modelContext.delete(profile)
+    }
+}
+
+struct SerialProfileRow: View {
+    let profile: SerialProfile
+    let sessions: [TerminalSession]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "cable.connector")
+                    .foregroundStyle(HostColor.color(profile.colorLabel) ?? .secondary)
+                    .frame(width: 18)
+                if !sessions.isEmpty {
+                    Circle()
+                        .fill(sessions.contains(where: \.isConnected) ? Color.green : (sessions.contains(where: \.isBusy) ? Color.orange : Color.secondary))
+                        .frame(width: 7, height: 7)
+                        .offset(x: 2, y: 2)
+                }
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(profile.name).lineLimit(1)
+                Text("\((profile.devicePath as NSString).lastPathComponent) · \(profile.lineSummary)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 2)
     }
 }
 

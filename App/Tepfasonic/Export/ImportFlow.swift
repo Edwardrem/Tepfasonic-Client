@@ -81,7 +81,7 @@ final class ImportFlow: Identifiable {
 
     private func review(_ document: TepfaDocument) {
         guard !document.isEmpty else {
-            stage = .failed("Nothing to import: the file holds no hosts, identities, snippets or known hosts.")
+            stage = .failed("Nothing to import: the file holds no hosts, identities, snippets, rules, themes, serial profiles or known hosts.")
             return
         }
         do {
@@ -107,9 +107,11 @@ final class ImportFlow: Identifiable {
             if !before.isEmpty {
                 try? Backups.store(try TepfaFile.encode(before, passphrase: nil), label: "before-import")
             }
-            let result = try await plan.apply(to: context, knownHosts: KnownHostsStore.shared) { identity, secrets in
+            let result = try await plan.apply(to: context, knownHosts: KnownHostsStore.shared, secretWriter: { identity, secrets in
                 try ExportSecrets.write(secrets, for: identity)
-            }
+            }, proxyPasswordWriter: { ownerID, password in
+                try ExportSecrets.writeProxyPassword(password, ownerID: ownerID)
+            })
             stage = .done(result)
         } catch {
             stage = .failed(error.localizedDescription)
@@ -321,6 +323,7 @@ struct ImportResultView: View {
                 Text("\(result.added) added, \(result.replaced) replaced, \(result.skipped) skipped.")
                 if result.knownHostsAdded > 0 { Text("\(result.knownHostsAdded) host keys trusted.") }
                 if result.secretsStored > 0 { Text("\(result.secretsStored) secrets stored in the Keychain.") }
+                if result.proxyPasswordsStored > 0 { Text("\(result.proxyPasswordsStored) proxy passwords stored in the Keychain.") }
                 if result.keysMovedToKeychain > 0 {
                     Text("\(result.keysMovedToKeychain) key files were not found on this Mac; their keys now live in the Keychain.")
                 }

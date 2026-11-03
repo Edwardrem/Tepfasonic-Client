@@ -6,6 +6,8 @@ struct SettingsView: View {
         TabView {
             GeneralSettingsView()
                 .tabItem { Label("General", systemImage: "gearshape") }
+            AppearanceSettingsView()
+                .tabItem { Label("Appearance", systemImage: "paintpalette") }
             SecuritySettingsView()
                 .tabItem { Label("Security", systemImage: "lock.shield") }
             KnownHostsSettingsView()
@@ -14,6 +16,8 @@ struct SettingsView: View {
                 .tabItem { Label("Data", systemImage: "externaldrive") }
             ClaudeSettingsView()
                 .tabItem { Label("Claude", systemImage: "sparkles") }
+            CloudSettingsView()
+                .tabItem { Label("Cloud", systemImage: "cloud") }
             UpdatesSettingsView()
                 .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
         }
@@ -25,9 +29,6 @@ struct GeneralSettingsView: View {
     @AppStorage(TerminalPreferences.copyOnSelectKey) private var copyOnSelect = false
     @AppStorage(TerminalPreferences.warnOnMultiLinePasteKey) private var warnOnMultiLinePaste = true
     @AppStorage(TerminalPreferences.scrollbackKey) private var scrollback = 100_000
-    @AppStorage("ui.showTabBar") private var showTabBar = true
-    @AppStorage("ui.showStatusBar") private var showStatusBar = true
-    @AppStorage("ui.showColorStripes") private var showColorStripes = true
     @AppStorage(TerminalPreferences.shellIntegrationKey) private var shellIntegration = true
     @AppStorage(TerminalPreferences.recordHistoryKey) private var recordHistory = true
     @AppStorage(TerminalPreferences.suggestionsKey) private var suggestions = true
@@ -65,9 +66,9 @@ struct GeneralSettingsView: View {
                     }
             }
             Section("Layout") {
-                Toggle("Show tab bar", isOn: $showTabBar)
-                Toggle("Show status bar", isOn: $showStatusBar)
-                Toggle("Show host colour stripes on terminals", isOn: $showColorStripes)
+                Text("Tab bar, status bar, colour stripes, fonts and colour schemes are in Appearance.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

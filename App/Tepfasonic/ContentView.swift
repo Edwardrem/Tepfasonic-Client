@@ -10,9 +10,12 @@ struct ContentView: View {
     @Environment(Workspace.self) private var workspace
     @Environment(AgentPanelController.self) private var agent
     @Environment(MCPServerController.self) private var mcp
+    @Environment(PortForwardingManager.self) private var forwarding
+    @Environment(ThemeStore.self) private var themes
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openWindow) private var openWindow
     @Query private var hosts: [SSHHost]
+    @Query private var forwardRules: [PortForwardRule]
     @State private var restored = false
     @State private var saveTask: Task<Void, Never>?
 
@@ -40,9 +43,13 @@ struct ContentView: View {
                     SnippetListView()
                 case .history:
                     HistoryListView()
+                case .ports:
+                    PortForwardListView()
                 }
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 400)
+            .environment(\.defaultMinListRowHeight, themes.appearance.compactSidebar ? 20 : 28)
+            .controlSize(themes.appearance.compactSidebar ? .small : .regular)
         } detail: {
             WorkspaceView()
                 .inspector(isPresented: $appState.isShowingAgentPanel) {
@@ -91,7 +98,22 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $appState.isAddingGroup) {
-            GroupEditorView()
+            GroupEditorView(group: nil)
+        }
+        .sheet(item: $appState.groupEditor) { group in
+            GroupEditorView(group: group)
+        }
+        .sheet(item: $appState.portForwardEditor) { target in
+            PortForwardEditorView(target: target)
+        }
+        .sheet(item: $appState.serialProfileEditor) { target in
+            SerialProfileEditorView(target: target)
+        }
+        .sheet(isPresented: $appState.isShowingCloudImport) {
+            CloudImportSheet()
+        }
+        .sheet(item: $appState.pendingThemeInstall) { pending in
+            ThemeInstallSheet(pending: pending)
         }
         .sheet(isPresented: $appState.isShowingSearch) {
             SearchPaletteView()
@@ -137,15 +159,33 @@ struct ContentView: View {
                         Label("Clear History", systemImage: "trash")
                     }
                     .help("Clear the command history")
+                case .ports:
+                    Button {
+                        appState.portForwardEditor = .create(hostID: appState.selectedHostID)
+                    } label: {
+                        Label("New Rule", systemImage: "plus")
+                    }
+                    .help("New forwarding rule")
                 }
             }
         }
         .task {
             restoreWorkspace()
             openWindowsRequestedOnLaunch()
+            syncForwardingRules()
             await mcp.apply()
         }
         .onChange(of: workspace.changeCount) { _, _ in scheduleSave() }
+        .onChange(of: forwardRules.count) { _, _ in syncForwardingRules() }
+        .onChange(of: appState.isShowingThemeEditor) { _, show in
+            guard show else { return }
+            openWindow(id: ThemeEditorView.windowID)
+            appState.isShowingThemeEditor = false
+        }
+    }
+
+    private func syncForwardingRules() {
+        forwarding.reconcile(with: forwardRules.map(PortForwardDescriptor.init))
     }
 
     private func restoreWorkspace() {
@@ -173,6 +213,14 @@ struct ContentView: View {
             case "export": appState.isExporting = true
             case "ssh-config-export": appState.isExportingSSHConfig = true
             case "agent": appState.isShowingAgentPanel = true
+            case "ports": appState.sidebarMode = .ports
+            case "cloud-import": appState.isShowingCloudImport = true
+            case "theme-editor": appState.isShowingThemeEditor = true
+            case "sftp":
+                if let host = hosts.first {
+                    appState.sftpHostID = host.uuid
+                    openWindow(id: "sftp")
+                }
             default: break
             }
         }

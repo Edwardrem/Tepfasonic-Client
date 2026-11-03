@@ -21,11 +21,30 @@ enum DemoData {
             let pair = try SSHKeyPair.generate(.ed25519, comment: "demo@tepfasonic")
             let key = try IdentityOperations.createKeychainIdentity(name: "Demo Ed25519", username: "deploy", pair: pair, in: context)
             let admin = try IdentityOperations.createPasswordIdentity(name: "Lab admin", username: "admin", password: "demo-password", in: context)
-            context.insert(SSHHost(name: "build-box", hostname: "10.0.0.5", username: "ubuntu", authMethod: .privateKey, tags: ["ci"], colorLabel: "#34C759", group: group, identity: key))
+            let bastion = SSHHost(name: "bastion", hostname: "bastion.example.org", username: "jump", authMethod: .privateKey, tags: ["jump"], colorLabel: "#FF9F0A", identity: key)
+            context.insert(bastion)
+            let buildBox = SSHHost(name: "build-box", hostname: "10.0.0.5", username: "ubuntu", authMethod: .privateKey, tags: ["ci"], colorLabel: "#34C759", group: group, identity: key)
+            buildBox.jumpHost = bastion
+            buildBox.themeID = "builtin:nord"
+            context.insert(buildBox)
             context.insert(SSHHost(name: "router", hostname: "192.168.1.1", username: "admin", authMethod: .privateKey, group: group, identity: admin))
-            context.insert(SSHHost(name: "example.org", hostname: "example.org", username: "me", authMethod: .password))
+            let production = SSHHost(name: "example.org", hostname: "example.org", username: "me", authMethod: .password)
+            production.backgroundTint = "#FF5F57"
+            production.watermark = "PROD"
+            production.agentPermission = .readOnly
+            context.insert(production)
+            context.insert(PortForwardRule(name: "Postgres on build-box", kind: .local, bindPort: 15432, targetHost: "localhost", targetPort: 5432, autoStart: true, host: buildBox))
+            context.insert(PortForwardRule(name: "Browser via bastion", kind: .dynamic, bindPort: 1080, host: bastion))
+            context.insert(PortForwardRule(name: "Expose dev server", kind: .remote, bindAddress: "0.0.0.0", bindPort: 8080, targetHost: "localhost", targetPort: 3000, host: production))
+            group.defaultJumpHost = bastion
+            group.themeID = "builtin:gruvbox-dark"
         } catch {
             print("DemoData: \(error)")
+        }
+
+        context.insert(SerialProfile(name: "Lab switch", devicePath: "/dev/cu.usbserial-1420", baudRate: 9600, colorLabel: "#BF5AF2"))
+        if let scheme = try? TerminalTheme.bundled(id: "builtin:dracula")?.asUserTheme(named: "Dracula (mine)").encodedJSON() {
+            context.insert(TerminalThemeRecord(name: "Dracula (mine)", schemeJSON: scheme, source: "editor"))
         }
 
         let ops = SnippetFolder(name: "Ops", sortOrder: 0)

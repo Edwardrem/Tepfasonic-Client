@@ -10,6 +10,7 @@ struct SearchPaletteView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: [SortDescriptor(\SSHHost.sortOrder), SortDescriptor(\SSHHost.name)]) private var hosts: [SSHHost]
     @Query(sort: [SortDescriptor(\Snippet.sortOrder), SortDescriptor(\Snippet.name)]) private var snippets: [Snippet]
+    @Query(sort: [SortDescriptor(\SerialProfile.sortOrder), SortDescriptor(\SerialProfile.name)]) private var serialProfiles: [SerialProfile]
     @Environment(\.modelContext) private var modelContext
     @State private var query = ""
     @State private var selectedIndex = 0
@@ -17,12 +18,14 @@ struct SearchPaletteView: View {
 
     enum Result: Identifiable {
         case host(SSHHost)
+        case serial(SerialProfile)
         case snippet(Snippet)
         case quickConnect(HostDescriptor)
 
         var id: String {
             switch self {
             case .host(let host): "host-\(host.uuid)"
+            case .serial(let profile): "serial-\(profile.uuid)"
             case .snippet(let snippet): "snippet-\(snippet.uuid)"
             case .quickConnect(let descriptor): "quick-\(descriptor.target)"
             }
@@ -36,6 +39,9 @@ struct SearchPaletteView: View {
                 || host.username.lowercased().contains(needle) || host.tags.contains { $0.lowercased().contains(needle) }
                 || (host.group?.name.lowercased().contains(needle) ?? false)
         }.map(Result.host)
+        out += serialProfiles.filter { profile in
+            needle.isEmpty || profile.name.lowercased().contains(needle) || profile.devicePath.lowercased().contains(needle)
+        }.map(Result.serial)
         if !needle.isEmpty {
             out += snippets.filter { snippet in
                 snippet.name.lowercased().contains(needle) || snippet.command.lowercased().contains(needle)
@@ -52,7 +58,7 @@ struct SearchPaletteView: View {
         VStack(spacing: 0) {
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search hosts and snippets, or type user@host to connect", text: $query)
+                TextField("Search hosts, serial consoles and snippets, or type user@host to connect", text: $query)
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused($fieldFocused)
@@ -100,6 +106,15 @@ struct SearchPaletteView: View {
                     Text(host.tags.joined(separator: ", ")).font(.caption).foregroundStyle(.tertiary)
                 }
             }
+        case .serial(let profile):
+            HStack(spacing: 10) {
+                Image(systemName: "cable.connector").foregroundStyle(HostColor.color(profile.colorLabel) ?? .secondary)
+                VStack(alignment: .leading) {
+                    Text(profile.name)
+                    Text("\(profile.devicePath) · \(profile.lineSummary)").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
         case .snippet(let snippet):
             HStack(spacing: 10) {
                 Image(systemName: "text.badge.star").foregroundStyle(.secondary)
@@ -128,6 +143,9 @@ struct SearchPaletteView: View {
         case .host(let host):
             host.lastConnectedAt = .now
             workspace.openTab(host: HostDescriptor(host))
+        case .serial(let profile):
+            profile.lastConnectedAt = .now
+            workspace.openTab(host: HostDescriptor(profile))
         case .snippet(let snippet):
             dismiss()
             SnippetRunner.run(snippet, on: .currentTab, workspace: workspace, context: modelContext, appState: appState)

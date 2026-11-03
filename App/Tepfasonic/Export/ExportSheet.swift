@@ -28,7 +28,7 @@ struct ExportSheet: View {
     }
 
     private var canExport: Bool {
-        !isWorking && passphraseProblem == nil && (options.hosts || options.identities || options.snippets || options.knownHosts)
+        !isWorking && passphraseProblem == nil && (options.hosts || options.identities || options.snippets || options.knownHosts || options.themes || options.serialProfiles)
     }
 
     var body: some View {
@@ -39,6 +39,10 @@ struct ExportSheet: View {
                     Toggle("Identities", isOn: $options.identities)
                     Toggle("Snippets", isOn: $options.snippets)
                     Toggle("Known host keys", isOn: $options.knownHosts)
+                    Toggle("Port forwarding rules", isOn: $options.portForwards)
+                        .disabled(!options.hosts)
+                    Toggle("Themes", isOn: $options.themes)
+                    Toggle("Serial profiles", isOn: $options.serialProfiles)
                 }
                 Section("Protection") {
                     Toggle("Encrypt with a passphrase", isOn: $encrypt)
@@ -94,15 +98,18 @@ struct ExportSheet: View {
                 try await Vault.shared.ensureUnlocked(reason: "export saved passwords and keys")
             }
             var reader: (@MainActor (Identity) async throws -> TepfaDocument.IdentitySecrets?)?
+            var proxyReader: (@MainActor (UUID) async throws -> String?)?
             if exportOptions.secrets {
                 reader = { identity in try ExportSecrets.read(identity) }
+                proxyReader = { ownerID in try ExportSecrets.readProxyPassword(ownerID: ownerID) }
             }
             let document = try await ExportBuilder.document(
                 from: modelContext,
                 knownHosts: await KnownHostsStore.shared.allEntries(),
                 options: exportOptions,
                 appVersion: UpdateManager.currentShortVersion,
-                secrets: reader)
+                secrets: reader,
+                proxyPassword: proxyReader)
             let data: Data = try TepfaFile.encode(document, passphrase: encrypt ? passphrase : nil)
 
             let panel = NSSavePanel()

@@ -3,6 +3,7 @@ import SwiftData
 import SwiftUI
 import TepfaCore
 import TepfaSSH
+import TepfaTerminal
 
 struct HostEditorView: View {
     let target: AppState.HostEditorTarget
@@ -13,6 +14,7 @@ struct HostEditorView: View {
     @Query(sort: \HostGroup.name) private var groups: [HostGroup]
     @Query(sort: \Identity.name) private var identities: [Identity]
     @Query(sort: \Snippet.name) private var snippets: [Snippet]
+    @Query(sort: [SortDescriptor(\SSHHost.sortOrder), SortDescriptor(\SSHHost.name)]) private var allHosts: [SSHHost]
 
     @State private var name = ""
     @State private var hostname = ""
@@ -30,6 +32,15 @@ struct HostEditorView: View {
     @State private var agentPermission: AgentPermissionMode = .ask
     @State private var agentAllowlistText = ""
     @State private var keyError: String?
+    @State private var jumpHostID: UUID?
+    @State private var inheritsGroupJumpHost = true
+    @State private var proxy = ProxyFields()
+    @State private var inheritsGroupProxy = true
+    @State private var themeID: String?
+    @State private var fontName: String?
+    @State private var fontSize: Double?
+    @State private var backgroundTint: String?
+    @State private var watermark = ""
 
     private var isEditing: Bool {
         if case .edit = target { return true }
@@ -41,11 +52,37 @@ struct HostEditorView: View {
         return value
     }
 
+    private var editedHostID: UUID? {
+        if case .edit(let host) = target { return host.uuid }
+        return nil
+    }
+
+    private var selectedGroup: HostGroup? {
+        groups.first { $0.uuid == groupID }
+    }
+
     private var isValid: Bool {
         !hostname.trimmingCharacters(in: .whitespaces).isEmpty
             && !username.trimmingCharacters(in: .whitespaces).isEmpty
             && portNumber != nil
-            && (authMethod == .password || identityID != nil)
+            && (authMethod == .password || identityID != nil || selectedGroup?.defaultIdentity != nil)
+            && proxy.isValid
+            && jumpHostID != editedHostID
+    }
+
+    /// Hosts that may serve as a jump host: not this one, and not one that already jumps through it.
+    private var jumpCandidates: [SSHHost] {
+        allHosts.filter { candidate in
+            guard candidate.uuid != editedHostID else { return false }
+            var current: SSHHost? = candidate
+            var seen = 0
+            while let host = current, seen < HostDescriptor.maximumJumpDepth {
+                if host.effectiveJumpHost?.uuid == editedHostID { return false }
+                current = host.effectiveJumpHost
+                seen += 1
+            }
+            return true
+        }
     }
 
     var body: some View {
@@ -77,6 +114,10 @@ struct HostEditorView: View {
                         }
                         if let identity = identities.first(where: { $0.uuid == identityID }) {
                             identitySummary(identity)
+                        } else if let inherited = selectedGroup?.defaultIdentity {
+                            Text("None chosen: the group's default identity \(inherited.name) will be used.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                         if let keyError {
                             Text(keyError)
@@ -103,12 +144,46 @@ struct HostEditorView: View {
                     TextField("Notes", text: $notes, axis: .vertical)
                         .lineLimit(2...5)
                     LabeledContent("Colour label") {
-                        HStack(spacing: 6) {
-                            colorSwatch(nil)
-                            ForEach(HostColor.presets) { preset in
-                                colorSwatch(preset.hex)
+                        ColorLabelPicker(selection: $colorLabel)
+                    }
+                }
+                Section("Route") {
+                    Picker("Jump host", selection: $jumpHostID) {
+                        Text(selectedGroup?.defaultJumpHost != nil && inheritsGroupJumpHost ? "Group default (\(selectedGroup?.defaultJumpHost?.name ?? ""))" : "None (connect directly)").tag(UUID?.none)
+                        ForEach(jumpCandidates) { host in
+                            Text(host.name + (host.effectiveJumpHost.map { " (via \($0.name))" } ?? "")).tag(Optional(host.uuid))
+                        }
+                    }
+                    if selectedGroup?.defaultJumpHost != nil {
+                        Toggle("Use the group's jump host when none is set here", isOn: $inheritsGroupJumpHost)
+                    }
+                    Text("The connection is multiplexed through the bastion's SSH connection (a direct-tcpip channel, never a shell), and bastions can chain: each jump host's own jump host is used first.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                ProxySection(fields: $proxy, ownerID: editedHostID, inheritToggle: selectedGroup?.proxy != nil ? $inheritsGroupProxy : nil)
+                AppearanceSection(themeID: $themeID, fontName: $fontName, fontSize: $fontSize, inheritedLabel: selectedGroup != nil ? "Group setting" : "Global setting")
+                Section("Warnings") {
+                    LabeledContent("Background tint") {
+                        ColorLabelPicker(selection: $backgroundTint)
+                    }
+                    TextField("Watermark", text: $watermark, prompt: Text("PROD"))
+                    Text("A tint washes the terminal background with the colour; a watermark draws the text faintly across it. Both make a production box unmistakable.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if case .edit(let host) = target {
+                    Section("Port forwarding") {
+                        if host.portForwards.isEmpty {
+                            Text("No rules yet.").foregroundStyle(.secondary)
+                        } else {
+                            ForEach(host.portForwards.sorted { $0.sortOrder < $1.sortOrder }) { rule in
+                                Text(rule.displayName + (rule.autoStart ? " · starts on connect" : ""))
                             }
                         }
+                        Text("Rules are managed in the Port Forwarding sidebar (⌘⇧P).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 Section("Behaviour") {
@@ -172,7 +247,7 @@ struct HostEditorView: View {
             }
             .padding()
         }
-        .frame(width: 500, height: 600)
+        .frame(width: 520, height: 680)
         .onAppear(perform: load)
     }
 
@@ -204,26 +279,6 @@ struct HostEditorView: View {
         .foregroundStyle(.secondary)
     }
 
-    private func colorSwatch(_ hex: String?) -> some View {
-        Button {
-            colorLabel = hex
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(HostColor.color(hex) ?? Color(nsColor: .controlBackgroundColor))
-                    .frame(width: 18, height: 18)
-                if hex == nil {
-                    Image(systemName: "slash.circle").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-                if colorLabel == hex {
-                    Circle().strokeBorder(Color.primary, lineWidth: 2).frame(width: 22, height: 22)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .help(hex == nil ? "No colour" : (HostColor.presets.first { $0.hex == hex }?.name ?? hex!))
-    }
-
     private func load() {
         if case .createFrom(let descriptor) = target {
             name = descriptor.name
@@ -249,6 +304,15 @@ struct HostEditorView: View {
         shellIntegration = host.shellIntegration
         agentPermission = host.agentPermission
         agentAllowlistText = host.agentAllowlist.joined(separator: "\n")
+        jumpHostID = host.jumpHost?.uuid
+        inheritsGroupJumpHost = host.inheritsGroupJumpHost
+        proxy = ProxyFields(kind: host.proxyKindRaw, host: host.proxyHost, port: host.proxyPort, username: host.proxyUsername)
+        inheritsGroupProxy = host.inheritsGroupProxy
+        themeID = host.themeID
+        fontName = host.fontName
+        fontSize = host.fontSize
+        backgroundTint = host.backgroundTint
+        watermark = host.watermark ?? ""
     }
 
     private var agentAllowlist: [String] {
@@ -283,6 +347,7 @@ struct HostEditorView: View {
             host.agentPermission = agentPermission
             host.agentAllowlist = agentAllowlist
             modelContext.insert(host)
+            applyExtras(to: host)
         case .edit(let host):
             host.name = trimmedName.isEmpty ? trimmedHost : trimmedName
             host.hostname = trimmedHost
@@ -299,9 +364,23 @@ struct HostEditorView: View {
             host.shellIntegration = shellIntegration
             host.agentPermission = agentPermission
             host.agentAllowlist = agentAllowlist
+            applyExtras(to: host)
         }
         try? modelContext.save()
         dismiss()
+    }
+
+    private func applyExtras(to host: SSHHost) {
+        host.jumpHost = allHosts.first { $0.uuid == jumpHostID && $0.uuid != host.uuid }
+        host.inheritsGroupJumpHost = inheritsGroupJumpHost
+        proxy.apply(kind: &host.proxyKindRaw, host: &host.proxyHost, port: &host.proxyPort, username: &host.proxyUsername, ownerID: host.uuid)
+        host.inheritsGroupProxy = inheritsGroupProxy
+        host.themeID = themeID
+        host.fontName = fontName
+        host.fontSize = fontSize
+        host.backgroundTint = backgroundTint
+        let mark = watermark.trimmingCharacters(in: .whitespaces)
+        host.watermark = mark.isEmpty ? nil : mark
     }
 
     private func chooseKeyFile() {

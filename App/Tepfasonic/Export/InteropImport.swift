@@ -11,6 +11,9 @@ enum ImportRequest: Equatable, Identifiable {
     case termius
     case putty
     case tabby
+    /// A terminal colour scheme in any supported format (chosen with a panel).
+    case themeFile
+    case themeFileAt(URL)
 
     var id: String {
         switch self {
@@ -20,6 +23,8 @@ enum ImportRequest: Equatable, Identifiable {
         case .termius: "termius"
         case .putty: "putty"
         case .tabby: "tabby"
+        case .themeFile: "themeFile"
+        case .themeFileAt(let url): "theme:\(url.path)"
         }
     }
 }
@@ -81,6 +86,11 @@ enum InteropImport {
                 guard !sessions.isEmpty else { throw Failure.nothingFound("PuTTY sessions") }
                 return PuTTYSessions.document(from: sessions)
             }
+        case .themeFile:
+            guard let url = choose(title: "Import a terminal colour scheme (iTerm2, Windows Terminal, VS Code, Alacritty, Ghostty or Tepfasonic JSON)", types: nil, directories: false) else { return nil }
+            return await themeFlow(url: url, context: context)
+        case .themeFileAt(let url):
+            return await themeFlow(url: url, context: context)
         case .tabby:
             var url = TabbyConfig.defaultURL
             if !FileManager.default.fileExists(atPath: url.path) {
@@ -93,6 +103,18 @@ enum InteropImport {
                 guard !profiles.isEmpty else { throw Failure.nothingFound("SSH profiles") }
                 return TabbyConfig.document(from: profiles)
             }
+        }
+    }
+
+    /// A theme file becomes a one-record document so it goes through the same review.
+    private static func themeFlow(url: URL, context: ModelContext) async -> ImportFlow {
+        await documentFlow(source: url.lastPathComponent, context: context) {
+            let data = try Data(contentsOf: url)
+            let theme = try ThemeImporter.theme(from: data, fileName: url.lastPathComponent)
+            var document = TepfaDocument()
+            let id = UUID(uuidString: theme.id) ?? UUID()
+            document.themes = [.init(id: id, name: theme.name, source: ThemeImporter.sourceName(for: url.lastPathComponent), scheme: theme)]
+            return document
         }
     }
 

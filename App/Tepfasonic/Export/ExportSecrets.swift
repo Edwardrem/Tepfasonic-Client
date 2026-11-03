@@ -32,6 +32,15 @@ enum ExportSecrets {
         return out.isEmpty ? nil : out
     }
 
+    /// The proxy password saved for a host or group, for an encrypted export.
+    static func readProxyPassword(ownerID: UUID) throws -> String? {
+        try SecretStore.shared.string(account: SecretAccount.proxyPassword(ownerID))
+    }
+
+    static func writeProxyPassword(_ password: String, ownerID: UUID) throws {
+        try SecretStore.shared.set(password, account: SecretAccount.proxyPassword(ownerID), label: "Tepfasonic proxy password")
+    }
+
     /// Stores imported secrets for an identity that now exists.
     static func write(_ secrets: TepfaDocument.IdentitySecrets, for identity: Identity) throws {
         let store = SecretStore.shared

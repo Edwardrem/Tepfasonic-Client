@@ -23,7 +23,7 @@ final class AppState {
     }
 
     enum SidebarMode: String, CaseIterable, Identifiable {
-        case hosts, snippets, history
+        case hosts, snippets, history, ports
 
         var id: String { rawValue }
 
@@ -32,6 +32,7 @@ final class AppState {
             case .hosts: "Hosts"
             case .snippets: "Snippets"
             case .history: "History"
+            case .ports: "Port Forwarding"
             }
         }
 
@@ -40,6 +41,31 @@ final class AppState {
             case .hosts: "server.rack"
             case .snippets: "text.badge.star"
             case .history: "clock.arrow.circlepath"
+            case .ports: "arrow.left.arrow.right"
+            }
+        }
+    }
+
+    enum PortForwardEditorTarget: Identifiable {
+        case create(hostID: UUID?)
+        case edit(PortForwardRule)
+
+        var id: String {
+            switch self {
+            case .create(let hostID): "create-\(hostID?.uuidString ?? "any")"
+            case .edit(let rule): "edit-\(rule.uuid.uuidString)"
+            }
+        }
+    }
+
+    enum SerialProfileEditorTarget: Identifiable {
+        case create
+        case edit(SerialProfile)
+
+        var id: String {
+            switch self {
+            case .create: "create"
+            case .edit(let profile): "edit-\(profile.uuid.uuidString)"
             }
         }
     }
@@ -82,4 +108,13 @@ final class AppState {
     var isShowingAgentPanel = false
     /// Commands waiting for the user; the first one is on screen.
     var pendingApprovals: [AgentApprovalPrompt] = []
+    var groupEditor: HostGroup?
+    var portForwardEditor: PortForwardEditorTarget?
+    var serialProfileEditor: SerialProfileEditorTarget?
+    /// The host whose files are shown in the SFTP window (opened from a session or the sidebar).
+    var sftpHostID: UUID?
+    var isShowingCloudImport = false
+    var isShowingThemeEditor = false
+    /// A theme fetched from a `tepfasonic://theme?url=` link, waiting for the user to confirm.
+    var pendingThemeInstall: PendingThemeInstall?
 }

@@ -19,6 +19,11 @@ targets:
     platform: macOS
     sources:
       - path: App/Tepfasonic
+        excludes:
+          - "Fonts/**"
+      - path: App/Tepfasonic/Fonts
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: Tepfa
         product: TepfaCore
@@ -49,6 +54,8 @@ targets:
         NSPrincipalClass: NSApplication
         NSSupportsAutomaticTermination: false
         NSSupportsSuddenTermination: false
+        # Fonts in Contents/Resources/Fonts are available to the app (JetBrains Mono, OFL).
+        ATSApplicationFontsPath: Fonts
         # Sparkle. SUPublicEDKey is filled in once `generate_keys` has been run
         # (see docs/RELEASING.md); until then updates are download-only.
         SUFeedURL: https://edwardrem.github.io/Tepfasonic-Client/appcast.xml
@@ -64,6 +71,16 @@ targets:
             CFBundleTypeRole: Editor
             LSHandlerRank: Owner
             LSItemContentTypes: [com.tepfasonic.tepfa]
+          - CFBundleTypeName: iTerm2 Color Scheme
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.googlecode.iterm2.itermcolors]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.googlecode.iterm2.itermcolors
+            UTTypeDescription: iTerm2 Color Scheme
+            UTTypeConformsTo: [com.apple.property-list]
+            UTTypeTagSpecification:
+              public.filename-extension: [itermcolors]
         UTExportedTypeDeclarations:
           - UTTypeIdentifier: com.tepfasonic.tepfa
             UTTypeDescription: Tepfasonic Export

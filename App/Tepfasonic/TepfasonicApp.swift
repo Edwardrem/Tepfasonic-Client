@@ -8,11 +8,14 @@ import TepfaTerminal
 @main
 struct TepfasonicApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.openWindow) private var openWindow
     @State private var appState: AppState
     @State private var workspace: Workspace
     @State private var updates = UpdateManager()
     @State private var agent: AgentPanelController
     @State private var mcp: MCPServerController
+    @State private var forwarding: PortForwardingManager
+    @State private var themes: ThemeStore
     private let container: ModelContainer
 
     init() {
@@ -34,6 +37,8 @@ struct TepfasonicApp: App {
         _workspace = State(initialValue: workspace)
         _agent = State(initialValue: AgentPanelController(toolHost: toolHost, context: container.mainContext, workspace: workspace))
         _mcp = State(initialValue: MCPServerController(toolHost: toolHost))
+        _forwarding = State(initialValue: PortForwardingManager(workspace: workspace))
+        _themes = State(initialValue: ThemeStore(context: container.mainContext))
     }
 
     var body: some Scene {
@@ -44,10 +49,16 @@ struct TepfasonicApp: App {
                 .environment(updates)
                 .environment(agent)
                 .environment(mcp)
+                .environment(forwarding)
+                .environment(themes)
                 .onAppear {
                     appDelegate.workspace = workspace
                     appDelegate.appState = appState
+                    appDelegate.forwarding = forwarding
+                    appDelegate.themes = themes
                 }
+                .preferredColorScheme(themes.appearance.colorScheme)
+                .tint(themes.appearance.accentColor)
                 .sheet(item: Bindable(updates).availableUpdate) { item in
                     UpdateAvailableView(item: item)
                         .environment(updates)
@@ -68,6 +79,10 @@ struct TepfasonicApp: App {
                     Button("Termius CSV…") { appState.importRequest = .termius }
                     Button("PuTTY Sessions…") { appState.importRequest = .putty }
                     Button("Tabby Config…") { appState.importRequest = .tabby }
+                    Divider()
+                    Button("Cloud Provider (AWS, DigitalOcean, Azure)…") { appState.isShowingCloudImport = true }
+                    Divider()
+                    Button("Terminal Theme File…") { appState.importRequest = .themeFile }
                 }
                 Divider()
                 Button("Export…") { appState.isExporting = true }
@@ -81,6 +96,8 @@ struct TepfasonicApp: App {
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                 Button("New Snippet…") { appState.snippetEditor = .create(folder: nil, command: nil) }
                     .keyboardShortcut("n", modifiers: [.command, .option])
+                Button("New Forwarding Rule…") { appState.portForwardEditor = .create(hostID: appState.selectedHostID) }
+                Button("New Serial Console…") { appState.serialProfileEditor = .create }
                 Divider()
                 Button("New Tab…") { appState.isShowingNewTabPicker = true }
                     .keyboardShortcut("t", modifiers: .command)
@@ -126,6 +143,17 @@ struct TepfasonicApp: App {
                     appState.isShowingAgentPanel = true
                 }
                 .disabled(workspace.focusedSession == nil)
+                Divider()
+                Button("Find in Terminal…") { NotificationCenter.default.post(name: .tepfaFindInTerminal, object: nil) }
+                    .keyboardShortcut("f", modifiers: .command)
+                    .disabled(workspace.focusedSession == nil)
+                Button("Browse Files (SFTP)…") {
+                    guard let host = workspace.focusedSession?.host, !host.isTransient, !host.isSerial else { return }
+                    appState.sftpHostID = host.id
+                    openWindow(id: "sftp")
+                }
+                .keyboardShortcut("o", modifiers: [.command, .option])
+                .disabled(workspace.focusedSession?.host.isTransient != false)
             }
             CommandGroup(after: .sidebar) {
                 Button("Show Hosts") { appState.sidebarMode = .hosts }
@@ -134,6 +162,10 @@ struct TepfasonicApp: App {
                     .keyboardShortcut("s", modifiers: [.command, .shift])
                 Button("Show History") { appState.sidebarMode = .history }
                     .keyboardShortcut("y", modifiers: .command)
+                Button("Show Port Forwarding") { appState.sidebarMode = .ports }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                Divider()
+                Button("Theme Editor…") { openWindow(id: ThemeEditorView.windowID) }
                 Divider()
                 Button(appState.isShowingAgentPanel ? "Hide Claude Panel" : "Show Claude Panel") { appState.isShowingAgentPanel.toggle() }
                     .keyboardShortcut("a", modifiers: [.command, .shift])
@@ -152,9 +184,28 @@ struct TepfasonicApp: App {
 
         WindowGroup("Session", id: "session", for: UUID.self) { $hostID in
             SessionWindowView(hostID: hostID)
+                .environment(themes)
+                .environment(forwarding)
         }
         .modelContainer(container)
         .defaultSize(width: 900, height: 600)
+
+        Window("Files", id: "sftp") {
+            SFTPWindowView()
+                .environment(appState)
+                .environment(workspace)
+                .environment(themes)
+        }
+        .modelContainer(container)
+        .defaultSize(width: 1100, height: 680)
+
+        Window("Theme Editor", id: ThemeEditorView.windowID) {
+            ThemeEditorView()
+                .environment(themes)
+                .environment(appState)
+        }
+        .modelContainer(container)
+        .defaultSize(width: 900, height: 620)
 
         Window("Identities & Keys", id: IdentitiesView.windowID) {
             IdentitiesView()
@@ -167,6 +218,8 @@ struct TepfasonicApp: App {
                 .environment(updates)
                 .environment(appState)
                 .environment(mcp)
+                .environment(themes)
+                .environment(forwarding)
         }
         .modelContainer(container)
     }
@@ -188,13 +241,36 @@ struct IdentityCommands: Commands {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var workspace: Workspace?
     var appState: AppState?
+    var forwarding: PortForwardingManager?
+    var themes: ThemeStore?
 
-    /// Double-clicked or dropped `.tepfa` files.
+    /// Double-clicked or dropped `.tepfa` files, theme JSON files, and `tepfasonic://theme?url=` links.
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard let url = urls.first(where: { $0.pathExtension == TepfaFile.fileExtension }) ?? urls.first else { return }
         MainActor.assumeIsolated {
-            appState?.importRequest = .file(url)
+            for url in urls {
+                if url.scheme == "tepfasonic" {
+                    handleAppLink(url)
+                } else if url.pathExtension == TepfaFile.fileExtension {
+                    appState?.importRequest = .file(url)
+                } else if url.pathExtension.lowercased() == "json" || url.pathExtension.lowercased() == "itermcolors" {
+                    appState?.importRequest = .themeFileAt(url)
+                } else {
+                    appState?.importRequest = .file(url)
+                }
+            }
             NSApp.activate()
+        }
+    }
+
+    @MainActor
+    private func handleAppLink(_ url: URL) {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
+        switch components.host ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
+        case "theme":
+            guard let source = components.queryItems?.first(where: { $0.name == "url" })?.value, let themeURL = URL(string: source) else { return }
+            appState?.pendingThemeInstall = PendingThemeInstall(sourceURL: themeURL)
+        default:
+            break
         }
     }
 
@@ -218,6 +294,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? workspace.snapshot().save()
             workspace.disconnectAll()
         }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        MainActor.assumeIsolated { themes?.systemAppearanceChanged() }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
