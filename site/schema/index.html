@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The .tepfa file format</title>
+  <style>
+    :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --card: #f5f5f7; --border: #e5e5ea; --accent: #2a99e6; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #111113; --fg: #f5f5f7; --muted: #a1a1a6; --card: #1c1c1e; --border: #2c2c2e; } }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; }
+    main { max-width: 860px; margin: 0 auto; padding: 40px 16px 80px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    td, th { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    code, pre { font: 13px ui-monospace, "SF Mono", Menlo, monospace; }
+    code { background: var(--card); padding: 2px 6px; border-radius: 6px; }
+    pre { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; overflow-x: auto; }
+    a { color: var(--accent); }
+    h2 { margin-top: 36px; }
+  </style>
+</head>
+<body>
+<main>
+  <p><a href="../">← Tepfasonic</a></p>
+  <h1>The <code>.tepfa</code> file format</h1>
+  <p>A <code>.tepfa</code> file is JSON. Plain files hold the document directly; encrypted files (the default) hold an envelope whose <code>ciphertext</code> decrypts to the same document. Every record carries a stable UUID, so importing the same file twice updates records instead of duplicating them.</p>
+
+  <h2>Envelope (encrypted)</h2>
+  <pre>{
+  "format": "tepfa",
+  "version": 1,
+  "kdf": { "name": "argon2id", "salt": "base64", "memoryKiB": 65536, "iterations": 3, "parallelism": 1 },
+  "cipher": "chacha20-poly1305",
+  "nonce": "base64 (12 bytes)",
+  "ciphertext": "base64 (ciphertext || 16-byte tag)"
+}</pre>
+  <p>The key is <code>Argon2id(passphrase, salt)</code> with a 32-byte output; the plaintext is the document below, UTF-8 JSON.</p>
+
+  <h2>Document</h2>
+  <pre>{
+  "format": "tepfa",
+  "schemaVersion": 1,
+  "exportedAt": "2026-11-03T10:00:00Z",
+  "appVersion": "0.1.0",
+  "groups": [], "hosts": [], "identities": [],
+  "snippetFolders": [], "snippets": [],
+  "portForwards": [], "themes": [], "serialProfiles": [],
+  "knownHosts": [],
+  "secrets": { "identities": {}, "proxyPasswords": {} }   // encrypted files only
+}</pre>
+  <p>Arrays may be omitted; readers treat a missing array as empty. Fields added in later releases are optional so older files still import.</p>
+
+  <h2>Records</h2>
+  <table>
+    <tr><th>Array</th><th>Fields</th></tr>
+    <tr><td><code>groups</code></td><td><code>id</code>, <code>name</code>, <code>sortOrder</code>, <code>colorLabel</code>, <code>defaultIdentityID</code>, <code>defaultJumpHostID</code>, <code>proxy</code> {kind, host, port, username}, <code>themeID</code>, <code>fontName</code>, <code>fontSize</code></td></tr>
+    <tr><td><code>hosts</code></td><td><code>id</code>, <code>name</code>, <code>hostname</code>, <code>port</code>, <code>username</code>, <code>authMethod</code> (<code>password</code> | <code>privateKey</code>), <code>tags</code>, <code>notes</code>, <code>sortOrder</code>, <code>colorLabel</code>, <code>autoReconnect</code>, <code>groupID</code>, <code>identityID</code>, <code>defaultSnippetID</code>, <code>shellIntegration</code>, <code>agentPermission</code> (<code>read-only</code> | <code>ask</code> | <code>allowlist</code>), <code>agentAllowlist</code>, <code>jumpHostID</code>, <code>inheritsGroupJumpHost</code>, <code>proxy</code>, <code>inheritsGroupProxy</code>, <code>themeID</code>, <code>fontName</code>, <code>fontSize</code>, <code>backgroundTint</code>, <code>watermark</code></td></tr>
+    <tr><td><code>identities</code></td><td><code>id</code>, <code>name</code>, <code>username</code>, <code>credentialKind</code> (<code>password</code> | <code>keyFile</code> | <code>keychainKey</code>), <code>privateKeyPath</code>, <code>publicKey</code>, <code>keyType</code>, <code>fingerprint</code></td></tr>
+    <tr><td><code>snippetFolders</code></td><td><code>id</code>, <code>name</code>, <code>sortOrder</code></td></tr>
+    <tr><td><code>snippets</code></td><td><code>id</code>, <code>name</code>, <code>command</code>, <code>tags</code>, <code>notes</code>, <code>sortOrder</code>, <code>folderID</code></td></tr>
+    <tr><td><code>portForwards</code></td><td><code>id</code>, <code>hostID</code>, <code>kind</code> (<code>local</code> | <code>remote</code> | <code>dynamic</code>), <code>bindAddress</code>, <code>bindPort</code>, <code>targetHost</code>, <code>targetPort</code>, <code>autoStart</code>, <code>name</code>, <code>sortOrder</code></td></tr>
+    <tr><td><code>themes</code></td><td><code>id</code>, <code>name</code>, <code>source</code>, <code>scheme</code> (a theme document, see below)</td></tr>
+    <tr><td><code>serialProfiles</code></td><td><code>id</code>, <code>name</code>, <code>devicePath</code>, <code>baudRate</code>, <code>dataBits</code>, <code>parity</code> (<code>none</code> | <code>even</code> | <code>odd</code>), <code>stopBits</code>, <code>flowControl</code> (<code>none</code> | <code>hardware</code> | <code>software</code>), <code>sendLineEnding</code> (<code>cr</code> | <code>lf</code> | <code>crlf</code>), <code>convertIncomingLF</code>, <code>localEcho</code>, <code>hexView</code>, <code>colorLabel</code>, <code>sortOrder</code></td></tr>
+    <tr><td><code>knownHosts</code></td><td><code>host</code>, <code>port</code>, <code>keyType</code>, <code>publicKey</code>, <code>fingerprintSHA256</code></td></tr>
+    <tr><td><code>secrets.identities</code></td><td>keyed by identity id: <code>password</code>, <code>privateKey</code> (OpenSSH text), <code>passphrase</code></td></tr>
+    <tr><td><code>secrets.proxyPasswords</code></td><td>keyed by the owning host or group id</td></tr>
+  </table>
+
+  <h2>Theme document</h2>
+  <p>The same JSON the Theme Editor exports and the <a href="../themes/">gallery</a> serves. Colours are <code>#RRGGBB</code>; <code>ansi</code> holds the 16 ANSI colours (normal then bright).</p>
+  <pre>{
+  "format": "tepfasonic-theme/1",
+  "id": "uuid",
+  "name": "Dracula",
+  "foreground": "#F8F8F2", "background": "#282A36",
+  "bold": null, "cursor": "#F8F8F2", "cursorText": "#282A36",
+  "selection": "#44475A", "selectionText": null,
+  "ansi": ["#21222C", "#FF5555", "#50FA7B", "#F1FA8C", "#BD93F9", "#FF79C6", "#8BE9FD", "#F8F8F2",
+           "#6272A4", "#FF6E6E", "#69FF94", "#FFFFA5", "#D6ACFF", "#FF92DF", "#A4FFFF", "#FFFFFF"],
+  "isDark": true
+}</pre>
+  <p>Install links take the form <code>tepfasonic://theme?url=https://…/scheme.json</code>; the app fetches the file, shows a preview and asks before saving it.</p>
+</main>
+</body>
+</html>

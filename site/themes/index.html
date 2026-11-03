@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tepfasonic theme gallery</title>
+  <style>
+    :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --card: #f5f5f7; --border: #e5e5ea; --accent: #2a99e6; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #111113; --fg: #f5f5f7; --muted: #a1a1a6; --card: #1c1c1e; --border: #2c2c2e; } }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; }
+    main { max-width: 960px; margin: 0 auto; padding: 40px 16px 80px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    .card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
+    .sample { padding: 12px; font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre; }
+    .swatches { display: flex; gap: 3px; margin-top: 8px; }
+    .swatches span { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+    .meta { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; }
+    .meta a { font-size: 14px; }
+    a { color: var(--accent); }
+    code { font: 13px ui-monospace, "SF Mono", Menlo, monospace; background: var(--card); padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+<main>
+  <p><a href="../">← Tepfasonic</a></p>
+  <h1>Theme gallery</h1>
+  <p>Community colour schemes. Click <strong>Install</strong> on a Mac with Tepfasonic to add one; the app previews it and asks before saving. Add your own by opening a pull request that drops a <code>.json</code> file exported from the Theme Editor into <code>site/themes/</code> and lists it in <code>themes.json</code>. The <a href="../schema/">schema page</a> describes the format.</p>
+  <div class="grid" id="gallery"></div>
+  <script>
+    const base = new URL('.', location.href).href;
+    fetch('themes.json').then(r => r.json()).then(list => {
+      const gallery = document.getElementById('gallery');
+      list.forEach(entry => fetch(entry.file).then(r => r.json()).then(theme => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        const sample = document.createElement('div');
+        sample.className = 'sample';
+        sample.style.background = theme.background;
+        sample.style.color = theme.foreground;
+        sample.innerHTML = `<span style="color:${theme.ansi[2]}">user@web-01</span>:<span style="color:${theme.ansi[4]}">~/app</span>$ git status\n<span style="color:${theme.ansi[1]}">modified:   src/server.ts</span>\n<span style="color:${theme.ansi[3]}">warning</span> <span style="color:${theme.ansi[5]}">0x1F</span> <span style="color:${theme.ansi[6]}">https://example.com</span>`;
+        const swatches = document.createElement('div');
+        swatches.className = 'swatches';
+        theme.ansi.forEach(hex => { const s = document.createElement('span'); s.style.background = hex; swatches.appendChild(s); });
+        sample.appendChild(swatches);
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const link = 'tepfasonic://theme?url=' + encodeURIComponent(new URL(entry.file, base).href);
+        meta.innerHTML = `<div><strong>${theme.name}</strong><br><span style="color:var(--muted);font-size:13px">by ${entry.author || 'unknown'}</span></div><div><a href="${link}">Install</a> · <a href="${entry.file}">JSON</a></div>`;
+        card.appendChild(sample);
+        card.appendChild(meta);
+        gallery.appendChild(card);
+      }));
+    });
+  </script>
+</main>
+</body>
+</html>

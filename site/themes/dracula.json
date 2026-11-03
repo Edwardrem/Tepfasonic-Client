@@ -1,0 +1,29 @@
+{
+  "ansi": [
+    "#21222C",
+    "#FF5555",
+    "#50FA7B",
+    "#F1FA8C",
+    "#BD93F9",
+    "#FF79C6",
+    "#8BE9FD",
+    "#F8F8F2",
+    "#6272A4",
+    "#FF6E6E",
+    "#69FF94",
+    "#FFFFA5",
+    "#D6ACFF",
+    "#FF92DF",
+    "#A4FFFF",
+    "#FFFFFF"
+  ],
+  "background": "#282A36",
+  "cursor": "#F8F8F2",
+  "cursorText": "#282A36",
+  "foreground": "#F8F8F2",
+  "format": "tepfasonic-theme/1",
+  "id": "605E940C-B577-55C6-9B42-3C8F173668AA",
+  "isDark": true,
+  "name": "Dracula",
+  "selection": "#44475A"
+}
