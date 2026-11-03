@@ -40,11 +40,25 @@
     <tr><td>Previous / next tab</td><td><kbd>⇧⌘[</kbd> / <kbd>⇧⌘]</kbd></td></tr>
     <tr><td>Jump to tab 1–9</td><td><kbd>⌘1</kbd> … <kbd>⌘9</kbd></td></tr>
     <tr><td>Reconnect / disconnect</td><td><kbd>⇧⌘R</kbd> / <kbd>⌥⌘D</kbd></td></tr>
+    <tr><td>Find in terminal</td><td><kbd>⌘F</kbd></td></tr>
+    <tr><td>Browse files on the host (SFTP)</td><td><kbd>⌥⌘O</kbd></td></tr>
+    <tr><td>Show snippets / history / port forwarding</td><td><kbd>⇧⌘S</kbd> / <kbd>⌘Y</kbd> / <kbd>⇧⌘P</kbd></td></tr>
+    <tr><td>Show or hide the Claude panel</td><td><kbd>⇧⌘A</kbd></td></tr>
+    <tr><td>Identities &amp; Keys</td><td><kbd>⇧⌘I</kbd></td></tr>
+    <tr><td>Export / import</td><td><kbd>⇧⌘E</kbd> / <kbd>⇧⌘O</kbd></td></tr>
+    <tr><td>Lock saved secrets</td><td><kbd>⇧⌘L</kbd></td></tr>
+    <tr><td>Stop the agent</td><td><kbd>Esc</kbd> in the agent tab</td></tr>
     <tr><td>Check for updates</td><td>Tepfasonic menu → Check for Updates…</td></tr>
   </table>
 
+  <h2>Jump hosts, proxies and forwarding</h2>
+  <p>Edit a host and choose a jump host under <em>Route</em>; the connection is tunnelled through the bastion's SSH connection, and bastions chain. Proxies (HTTP CONNECT or SOCKS5) sit on a host or a group. The Port Forwarding sidebar (<kbd>⇧⌘P</kbd>) holds local, remote and SOCKS5 rules that start with a click or on connect and show live byte counts.</p>
+  <h2>Files</h2>
+  <p>Press <kbd>⌥⌘O</kbd> in a session for the dual-pane SFTP browser. Either pane can show this Mac or any host; drag between them, or from the Finder. Double-click a remote file to open it in its default app; saving uploads it again.</p>
+  <h2>Serial consoles and cloud imports</h2>
+  <p>File → New Serial Console… saves a <code>/dev/cu.*</code> device with its line settings; it opens in a normal tab with an optional hex view. File → Import From → Cloud Provider lists EC2, DigitalOcean and Azure instances once read-only credentials are saved in Settings → Cloud.</p>
   <h2>Where things live</h2>
-  <p>Hosts, groups and identities: <code>~/Library/Application Support/Tepfasonic/Tepfasonic.store</code>. Trusted host keys: <code>known_hosts.json</code> in the same folder. Open tabs: <code>workspace.json</code>. Private keys and passwords: the macOS Keychain.</p>
+  <p>Hosts, groups, identities, snippets, forwarding rules, themes and serial profiles: <code>~/Library/Application Support/Tepfasonic/Tepfasonic.store</code>. Trusted host keys: <code>known_hosts.json</code> in the same folder. Open tabs: <code>workspace.json</code>. Backups: <code>backups/</code>. Open-with copies of remote files: <code>OpenWith/</code>. Private keys, passwords, proxy passwords, the Claude API key and cloud credentials: the macOS Keychain.</p>
 </main>
 </body>
 </html>

@@ -37,10 +37,11 @@
     <h1>Tepfasonic</h1>
     <p class="tagline">A free, open-source SSH client and terminal for macOS with a built-in Claude agent.<br>No account. No server. No subscription.</p>
     <div class="actions">
-      <a class="button primary" href="https://github.com/Edwardrem/Tepfasonic-Client/releases/latest">Download for macOS</a>
+      <a class="button primary" data-download-latest href="https://github.com/Edwardrem/Tepfasonic-Client/releases/latest">Download for macOS</a>
+      <a class="button secondary" href="download/">Install notes</a>
       <a class="button secondary" href="https://github.com/Edwardrem/Tepfasonic-Client">Source on GitHub</a>
     </div>
-    <p class="note">macOS 15 or later, Apple silicon and Intel. Or <code>brew tap edwardrem/tepfasonic &amp;&amp; brew install --cask tepfasonic</code>.</p>
+    <p class="note"><span data-latest-version>Latest release</span> · macOS 15 or later, Apple silicon and Intel · <a href="releases/">all releases</a>. Or <code>brew tap edwardrem/tepfasonic &amp;&amp; brew install --cask tepfasonic</code>.</p>
   </header>
 
   <section class="grid">
@@ -58,6 +59,7 @@
   <section>
     <h2>Documentation</h2>
     <ul>
+      <li><a href="download/">Download and install</a> · <a href="releases/">release history</a></li>
       <li><a href="docs/">Keyboard shortcuts and getting started</a></li>
       <li><a href="docs/PLAN.md">Product plan and build order</a></li>
       <li><a href="schema/">The <code>.tepfa</code> file format</a></li>
@@ -67,5 +69,6 @@
 
   <footer>MIT licensed. Built by Rufaro Mutepfa and contributors.</footer>
 </main>
+<script src="site.js"></script>
 </body>
 </html>

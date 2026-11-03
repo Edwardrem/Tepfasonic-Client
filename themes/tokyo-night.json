@@ -1,0 +1,29 @@
+{
+  "ansi": [
+    "#15161E",
+    "#F7768E",
+    "#9ECE6A",
+    "#E0AF68",
+    "#7AA2F7",
+    "#BB9AF7",
+    "#7DCFFF",
+    "#A9B1D6",
+    "#414868",
+    "#F7768E",
+    "#9ECE6A",
+    "#E0AF68",
+    "#7AA2F7",
+    "#BB9AF7",
+    "#7DCFFF",
+    "#C0CAF5"
+  ],
+  "background": "#1A1B26",
+  "cursor": "#C0CAF5",
+  "cursorText": "#1A1B26",
+  "foreground": "#C0CAF5",
+  "format": "tepfasonic-theme/1",
+  "id": "05FCC033-583B-5666-B3A9-F75801EF0B4D",
+  "isDark": true,
+  "name": "Tokyo Night",
+  "selection": "#33467C"
+}

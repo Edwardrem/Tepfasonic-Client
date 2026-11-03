@@ -12,10 +12,12 @@ _Nov 3, 2026 · Rufaro Mutepfa_
 | 4 | Keychain vault + Touch ID, identities & keys | **Done** (Nov 3, 2026) — see README; agent forwarding and FIDO2 blocked by SwiftNIO SSH |
 | 5 | Snippets and command history | **Done** (Nov 3, 2026) — folders, tags, `{{variables}}`, run in tab / all tabs / host / group, OSC 133 shell integration for bash & zsh, history with exit status, inline suggestions |
 | 6 | `.tepfa` export / import and `~/.ssh/config` interop | **Done** (Nov 3, 2026) — encrypted `.tepfa` (Argon2id + ChaCha20-Poly1305 in Swift), reviewed import (new / changed / identical with field diff, per-record choice, pre-import backup), last 10 backups in Settings → Data, import from `~/.ssh/config`, Termius CSV, PuTTY sessions and Tabby, export to a managed `~/.ssh/config` block, `.tepfa` registered as a document type |
-| 7 | Claude agent panel + MCP server with guardrails | Not started |
-| 8 | Port forwarding | Not started |
-| 9 | SFTP (dual-pane browser) | Not started |
-| 10 | Serial and cloud-provider host imports (AWS, DigitalOcean, Azure) | Not started |
+| 7 | Claude agent panel + MCP server with guardrails | **Done** (Nov 3, 2026) — BYOK panel (Anthropic Messages API with tool use, or any OpenAI-compatible endpoint), six tools, per-host permission modes, destructive-command detection, approval sheet with Approve / Edit / Deny, audit log with JSON export, agent log tab with Esc to stop, output passed as untrusted data; MCP server (streamable HTTP on localhost + stdio bridge) with the same guardrails and a one-line config per client in Settings |
+| 8 | Port forwarding | **Done** (Nov 3, 2026) — local, remote and dynamic (SOCKS5) rules per host, one-click start or auto-start on connect, live status and byte counts in the Port Forwarding sidebar, rules follow reconnects, exported in `.tepfa` |
+| 9 | SFTP (dual-pane browser) | **Done** (Nov 3, 2026) — SFTP v3 client in Swift, Files window with local and remote panes (either pane can point at any host for server-to-server copies via the Mac), drag and drop, transfer queue with pause / resume / cancel, folder transfers, rename, chmod, delete, new folder, open-with that re-uploads on save |
+| 10 | Serial and cloud-provider host imports (AWS, DigitalOcean, Azure) | **Done** (Nov 3, 2026) — USB serial consoles (`/dev/cu.*`) with saved line settings, line-ending conversion, local echo and a hex view, in the same tabs and splits; read-only EC2 / DigitalOcean / Azure listings with Keychain credentials that add instances through the reviewed import |
+| — | Jump hosts and proxies (section 6), group defaults | **Done** (Nov 3, 2026) — chained bastions over direct-tcpip channels, HTTP CONNECT and SOCKS5 proxies per host or group, group defaults for identity, jump host, proxy, theme and font |
+| — | Theming (section 16) | **Done** (Nov 3, 2026) — 13 bundled schemes, editor with live sample, import from iTerm2 / Windows Terminal / VS Code / Alacritty / Ghostty, JSON export, `tepfasonic://theme?url=` install links, bundled JetBrains Mono, cursor / contrast / opacity / blur, app appearance and accent, per-host and per-group overrides, background tint and watermark, corner badge, light / dark auto-switch by system or schedule, themes in `.tepfa` |
 
 ## Export / import instead of sync
 
