@@ -2,6 +2,8 @@
 
 Releases are cut by pushing a tag. CI does the rest (see `.github/workflows/release.yml`).
 
+**State on 2026-11-03:** `v0.1.0` is published (ad-hoc signed DMG, ZIP and `SHA256SUMS`), GitHub Pages is enabled from the `gh-pages` branch and serves the landing, download and releases pages. Still to do by the repository owner, because each needs a secret or a new repository: the Sparkle key pair (enables the update feed), the Developer ID certificate and notarization credentials (enables in-place updates), and the Homebrew tap repository with its token (enables `brew install --cask tepfasonic`).
+
 ```sh
 git tag v0.2.0 && git push origin v0.2.0        # stable → appcast.xml
 git tag v0.3.0-beta.1 && git push origin v0.3.0-beta.1   # pre-release → appcast-beta.xml
