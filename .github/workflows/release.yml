@@ -119,7 +119,17 @@ jobs:
               -o "pages/$FEED" appcast-work
             rm -f ed25519.key
           else
-            echo "SPARKLE_PRIVATE_KEY not set; appcast not regenerated (download-only builds read the feed too, so add the key to enable it)."
+            # No signing key: write the item by hand so download-only builds
+            # still learn about the release and offer the DMG. Existing items
+            # are kept; one with the same build number is replaced.
+            echo "SPARKLE_PRIVATE_KEY not set; writing an unsigned appcast item."
+            FEED=appcast.xml; [ "${{ steps.version.outputs.channel }}" = "beta" ] && FEED=appcast-beta.xml
+            BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "dist/${APP_NAME}.app/Contents/Info.plist")
+            DMG=$(ls dist/*.dmg | head -1)
+            FEED="pages/$FEED" BUILD="$BUILD" DMG="$DMG" \
+              VERSION="${{ steps.version.outputs.marketing }}" CHANNEL="${{ steps.version.outputs.channel }}" \
+              python3 Scripts/appcast_item.py
+            cat "pages/$FEED"
           fi
 
       - name: Checksums
@@ -151,9 +161,6 @@ jobs:
           prerelease: ${{ steps.version.outputs.channel == 'beta' }}
 
       - name: Publish appcast to gh-pages
-        if: ${{ env.SPARKLE_PRIVATE_KEY != '' }}
-        env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -61,6 +61,41 @@ import Testing
         #expect(Appcast.compareVersions("0.9", "1.0") == .orderedAscending)
     }
 
+    /// The feed `Scripts/appcast_item.py` writes when no Sparkle key is configured.
+    static let unsignedFeed = """
+    <?xml version="1.0" encoding="utf-8"?>
+    <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+      <channel>
+        <title>Tepfasonic</title>
+        <link>https://edwardrem.github.io/Tepfasonic-Client/</link>
+        <description>Tepfasonic releases</description>
+        <language>en</language>
+        <item>
+          <title>Tepfasonic 0.3.3</title>
+          <link>https://github.com/Edwardrem/Tepfasonic-Client/releases/tag/v0.3.3</link>
+          <sparkle:version>7</sparkle:version>
+          <sparkle:shortVersionString>0.3.3</sparkle:shortVersionString>
+          <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+          <sparkle:releaseNotesLink>https://github.com/Edwardrem/Tepfasonic-Client/releases/tag/v0.3.3</sparkle:releaseNotesLink>
+          <pubDate>Tue, 11 Nov 2026 12:00:00 GMT</pubDate>
+          <enclosure url="https://github.com/Edwardrem/Tepfasonic-Client/releases/download/v0.3.3/Tepfasonic-0.3.3.dmg" length="14836175" type="application/octet-stream" sparkle:version="7" sparkle:shortVersionString="0.3.3"/>
+        </item>
+      </channel>
+    </rss>
+    """
+
+    @Test func readsTheUnsignedWorkflowFeed() throws {
+        let appcast = try Appcast.parse(Data(Self.unsignedFeed.utf8))
+        let item = try #require(appcast.newestUpdate(after: "5"))
+        #expect(item.version == "7")
+        #expect(item.shortVersion == "0.3.3")
+        #expect(item.channel == nil)
+        #expect(item.downloadURL?.lastPathComponent == "Tepfasonic-0.3.3.dmg")
+        #expect(item.releaseNotesURL?.path.hasSuffix("/v0.3.3") == true)
+        #expect(item.publishedAt != nil)
+        #expect(appcast.newestUpdate(after: "7") == nil)
+    }
+
     @Test func rejectsGarbage() {
         #expect(throws: AppcastError.self) { try Appcast.parse(Data("<rss><channel><item>".utf8)) }
     }

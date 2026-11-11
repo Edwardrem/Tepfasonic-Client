@@ -127,7 +127,10 @@ final class UpdateManager: NSObject {
         isChecking = true
         defer { isChecking = false }
         do {
-            let (data, _) = try await URLSession.shared.data(from: feedURL)
+            let (data, response) = try await URLSession.shared.data(from: feedURL)
+            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                throw UpdateFeedError.status(http.statusCode)
+            }
             let appcast = try Appcast.parse(data)
             lastCheck = .now
             UserDefaults.standard.set(lastCheck, forKey: Self.lastCheckKey)
@@ -169,5 +172,17 @@ extension UpdateManager: SPUUpdaterDelegate {
 
     nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         MainActor.assumeIsolated { betaChannel ? ["beta"] : [] }
+    }
+}
+
+/// The feed answered, but not with an appcast.
+enum UpdateFeedError: LocalizedError {
+    case status(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .status(404): "The update feed has not been published yet (HTTP 404). Check the releases page for a newer build."
+        case .status(let code): "The update feed answered HTTP \(code)."
+        }
     }
 }
