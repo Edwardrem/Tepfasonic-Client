@@ -92,7 +92,9 @@ conversations. Your real hosts never leave your Mac.
   files, which are uploaded again whenever the editor saves them. Transfers
   pipeline 16 requests of 32 KiB and resume from where they stopped.
 - **Claude agent panel** (⌘⇧A): bring your own Anthropic API key (Keychain) or
-  point the panel at any OpenAI-compatible endpoint. Attach files to a message
+  point the panel at any OpenAI-compatible endpoint. Dictate a message with the
+  microphone button: speech is transcribed on your Mac (nothing leaves it) and
+  lands in the composer to edit and send. Attach files to a message
   with the paperclip or by dropping them on the panel: images, PDFs, Word
   documents (sent as their text) and text files such as logs, configs, code
   and CSV go to the model with your question. Ask for a report and Claude
