@@ -26,6 +26,12 @@
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
     .card h3 { margin: 0 0 6px; font-size: 17px; }
     .card p { margin: 0; color: var(--muted); font-size: 15px; }
+    .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px 24px; margin-top: 22px; }
+    .shots.lead { grid-template-columns: 1fr; }
+    .shots figure { margin: 0; }
+    .shots img { width: 100%; height: auto; display: block; }
+    .shots figcaption { color: var(--muted); font-size: 15px; margin-top: 8px; }
+    .shots figcaption b { color: var(--fg); font-weight: 600; }
     section { margin-top: 48px; }
     h2 { font-size: 26px; letter-spacing: -0.01em; }
     code { font: 14px ui-monospace, "SF Mono", Menlo, monospace; background: var(--card); padding: 2px 6px; border-radius: 6px; }
@@ -53,6 +59,51 @@
     <div class="card"><h3>Terminal you'd expect</h3><p>Tabs, nested splits, true colour, 100 000 lines of scrollback, auto-reconnect after sleep, restored on relaunch.</p></div>
     <div class="card"><h3>Move between Macs</h3><p>One encrypted <code>.tepfa</code> file carries hosts, keys, snippets and themes. Import from <code>~/.ssh/config</code>, Termius, PuTTY and Tabby.</p></div>
     <div class="card"><h3>Claude on your servers</h3><p>Bring your own API key, or connect Claude Desktop and Claude Code over MCP. Every command passes your per-host guardrails and lands in an audit log.</p></div>
+  </section>
+
+  <section id="screenshots">
+    <h2>See it in action</h2>
+    <p class="note">Every screenshot runs against a demo fleet. The hosts, keys and conversations are made up; your real hosts never leave your Mac.</p>
+    <div class="shots lead">
+      <figure>
+        <img src="screenshots/fleet-terminal.png" width="1600" height="1063" alt="Tepfasonic terminal connected to a demo host, with a grouped host sidebar on the left" loading="lazy">
+        <figcaption><b>Your whole fleet in one window.</b> Hosts grouped into Lab, Production and Staging, tabs and splits, a true-colour terminal, and a jump host for boxes you can only reach through a bastion.</figcaption>
+      </figure>
+    </div>
+    <div class="shots">
+      <figure>
+        <img src="screenshots/claude-panel.png" width="1600" height="1063" alt="The Claude panel summarising disk usage and producing a PDF report" loading="lazy">
+        <figcaption><b>AIOps, built in.</b> Ask Claude about one host or a whole group. It reads logs, runs commands over SSH behind your guardrails, and writes a PDF or Word report you can send on.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/command-approval.png" width="1600" height="1013" alt="An approval sheet asking before running rm -rf on a host" loading="lazy">
+        <figcaption><b>You stay in control.</b> Destructive commands like <code>rm -rf</code> always ask first, whatever a host's permission mode, and you can edit the command before it runs.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/host-editor.png" width="1600" height="1013" alt="The host editor showing connection, authentication and grouping fields" loading="lazy">
+        <figcaption><b>Every host, your way.</b> Hostname, port, identity, jump host, group, tags and colour. Keys stay in the login Keychain; pick one per host or share an identity.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/identities.png" width="1600" height="1106" alt="The Identities and Keys window listing SSH identities" loading="lazy">
+        <figcaption><b>Keys in one place.</b> Generate or import SSH identities, push a public key to a server, and keep private keys in the Keychain behind Touch ID.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/groups.png" width="1600" height="1013" alt="The New Group sheet with a checklist of hosts to include" loading="lazy">
+        <figcaption><b>Organise the fleet.</b> Build groups like Production or Home lab, tick the hosts that belong, colour-code them, and drag to re-sort the sidebar.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/snippets.png" width="1600" height="1063" alt="The snippets sidebar with reusable commands and placeholders" loading="lazy">
+        <figcaption><b>Run it again in a keystroke.</b> Reusable command snippets with fill-in placeholders, sorted into folders, one click from any terminal.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/theme-editor.png" width="1600" height="1099" alt="The Theme Editor with bundled schemes and a live terminal preview" loading="lazy">
+        <figcaption><b>Make it yours.</b> Ten bundled terminal themes or your own, with a live preview. Export a theme as JSON to share, or install one from a link.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/light-mode.png" width="1600" height="1063" alt="Tepfasonic in light appearance" loading="lazy">
+        <figcaption><b>Light or dark.</b> The whole app, sidebar and window chrome follow your terminal colour scheme and the system appearance.</figcaption>
+      </figure>
+    </div>
   </section>
 
   <section>
