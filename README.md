@@ -17,6 +17,26 @@ jump hosts, proxies and theming. Builds are published on the
 [GitHub Releases](https://github.com/Edwardrem/Tepfasonic-Client/releases);
 see "Known limits" for what the libraries underneath cannot do.
 
+## Screenshots
+
+Every screenshot runs against a demo fleet: made-up hosts, keys and
+conversations. Your real hosts never leave your Mac.
+
+![Tepfasonic connected to a demo host, with hosts grouped into Lab, Production and Staging in the sidebar, plus tabs, splits and a true-colour terminal.](site/screenshots/fleet-terminal.png)
+
+*Your whole fleet in one window: grouped hosts, tabs and splits, a true-colour terminal, and a jump host for boxes only reachable through a bastion.*
+
+| | |
+|---|---|
+| ![The Claude panel summarising disk usage and producing a PDF report.](site/screenshots/claude-panel.png) | ![An approval sheet asking before it runs rm -rf on a host.](site/screenshots/command-approval.png) |
+| **AIOps, built in.** Ask Claude about one host or a whole group. It reads logs, runs commands over SSH behind your guardrails, and writes a PDF or Word report. | **You stay in control.** Destructive commands like `rm -rf` always ask first, whatever a host's permission mode, and you can edit the command before it runs. |
+| ![The host editor with connection, authentication and grouping fields.](site/screenshots/host-editor.png) | ![The Identities and Keys window listing SSH identities.](site/screenshots/identities.png) |
+| **Every host, your way.** Hostname, port, identity, jump host, group, tags and colour. Keys stay in the login Keychain. | **Keys in one place.** Generate or import SSH identities, push a public key to a server, keep private keys behind Touch ID. |
+| ![The New Group sheet with a checklist of hosts to include.](site/screenshots/groups.png) | ![The snippets sidebar with reusable commands and placeholders.](site/screenshots/snippets.png) |
+| **Organise the fleet.** Build groups like Production or Home lab, tick the hosts that belong, colour-code them, drag to re-sort. | **Run it again in a keystroke.** Reusable command snippets with fill-in placeholders, sorted into folders, one click from any terminal. |
+| ![The Theme Editor with bundled schemes and a live terminal preview.](site/screenshots/theme-editor.png) | ![Tepfasonic in light appearance.](site/screenshots/light-mode.png) |
+| **Make it yours.** Ten bundled terminal themes or your own, with a live preview. Export a theme as JSON to share. | **Light or dark.** The whole app, sidebar and window chrome follow your terminal colour scheme and the system appearance. |
+
 ## What works today
 
 - **Host manager**: hosts with groups, tags, colour labels, notes, a snippet to

@@ -65,9 +65,19 @@ enum DemoData {
         if let port = env["TEPFA_TEST_SSH_PORT"].flatMap(Int.init), let keyPath = env["TEPFA_TEST_SSH_KEY"] {
             let identity = Identity(name: "Test sshd key", username: NSUserName(), credentialKind: .keyFile, privateKeyPath: keyPath)
             context.insert(identity)
-            let local = SSHHost(name: "local sshd", hostname: env["TEPFA_TEST_SSH_HOST"] ?? "127.0.0.1", port: port, username: NSUserName(), authMethod: .privateKey, tags: ["test"], colorLabel: "#FF9F0A", identity: identity)
+            // TEPFA_TEST_SSH_NAME names it (screenshots show "ci-runner" rather than "local sshd");
+            // TEPFA_TEST_SSH_HOSTKEY (path to the sshd's public host key) trusts it ahead of time.
+            let hostname = env["TEPFA_TEST_SSH_HOST"] ?? "127.0.0.1"
+            let local = SSHHost(name: env["TEPFA_TEST_SSH_NAME"] ?? "local sshd", hostname: hostname, port: port, username: NSUserName(), authMethod: .privateKey, tags: ["test"], sortOrder: 2, colorLabel: "#34C759", group: env["TEPFA_TEST_SSH_NAME"] == nil ? nil : group, identity: identity)
             local.defaultSnippet = diskUsage
+            local.inheritsGroupJumpHost = false   // reachable directly, whatever the group's bastion
             context.insert(local)
+            if let hostKeyPath = env["TEPFA_TEST_SSH_HOSTKEY"],
+               let line = try? String(contentsOfFile: hostKeyPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+               let fingerprint = HostKeyFingerprint.sha256(openSSHPublicKey: line) {
+                let keyType = String(line.split(separator: " ").first ?? "ssh-ed25519")
+                Task { try? await KnownHostsStore.shared.remember(host: hostname, port: port, keyType: keyType, publicKey: line, fingerprintSHA256: fingerprint) }
+            }
         }
         try? context.save()
     }

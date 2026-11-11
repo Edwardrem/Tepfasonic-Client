@@ -273,6 +273,15 @@ struct ContentView: View {
         .foregroundStyle(palette.text)
     }
 
+    #if DEBUG
+    /// A saved host by name, straight from the store: the `hosts` query can
+    /// still be empty when the launch flags run right after the demo seed.
+    private func savedHost(named name: String) -> SSHHost? {
+        let all = (try? modelContext.fetch(FetchDescriptor<SSHHost>())) ?? []
+        return all.first { $0.name == name } ?? hosts.first { $0.name == name }
+    }
+    #endif
+
     /// `--window=identities|settings|export|ssh-config-export|agent|…` opens a window at launch (used by UI checks).
     /// Debug builds also take `--seed-demo`, `--sidebar=hosts|snippets|history`, `--qa-agent-demo`,
     /// `--connect=<host name>` and `--qa-type=<text>` (typed into the new session).
@@ -352,7 +361,7 @@ struct ContentView: View {
         }
         for argument in CommandLine.arguments where argument.hasPrefix("--qa-edit-host=") {
             let name = String(argument.dropFirst("--qa-edit-host=".count))
-            if let host = hosts.first(where: { $0.name == name }) {
+            if let host = savedHost(named: name) {
                 appState.hostEditor = .edit(host)
             }
         }
@@ -363,7 +372,7 @@ struct ContentView: View {
         }
         for argument in CommandLine.arguments where argument.hasPrefix("--connect=") {
             let name = String(argument.dropFirst("--connect=".count))
-            guard let host = hosts.first(where: { $0.name == name }) else { continue }
+            guard let host = savedHost(named: name) else { continue }
             let session = workspace.openTab(host: HostDescriptor(host))
             if let typed = CommandLine.arguments.first(where: { $0.hasPrefix("--qa-type=") })?.dropFirst("--qa-type=".count) {
                 Task {
