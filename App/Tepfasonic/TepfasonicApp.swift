@@ -50,15 +50,13 @@ struct TepfasonicApp: App {
                 .environment(agent)
                 .environment(mcp)
                 .environment(forwarding)
-                .environment(themes)
+                .appAppearance(themes)
                 .onAppear {
                     appDelegate.workspace = workspace
                     appDelegate.appState = appState
                     appDelegate.forwarding = forwarding
                     appDelegate.themes = themes
                 }
-                .preferredColorScheme(themes.appearance.colorScheme)
-                .tint(themes.appearance.accentColor)
                 .sheet(item: Bindable(updates).availableUpdate) { item in
                     UpdateAvailableView(item: item)
                         .environment(updates)
@@ -184,8 +182,8 @@ struct TepfasonicApp: App {
 
         WindowGroup("Session", id: "session", for: UUID.self) { $hostID in
             SessionWindowView(hostID: hostID)
-                .environment(themes)
                 .environment(forwarding)
+                .appAppearance(themes)
         }
         .modelContainer(container)
         .defaultSize(width: 900, height: 600)
@@ -194,21 +192,22 @@ struct TepfasonicApp: App {
             SFTPWindowView()
                 .environment(appState)
                 .environment(workspace)
-                .environment(themes)
+                .appAppearance(themes)
         }
         .modelContainer(container)
         .defaultSize(width: 1100, height: 680)
 
         Window("Theme Editor", id: ThemeEditorView.windowID) {
             ThemeEditorView()
-                .environment(themes)
                 .environment(appState)
+                .appAppearance(themes)
         }
         .modelContainer(container)
         .defaultSize(width: 900, height: 620)
 
         Window("Identities & Keys", id: IdentitiesView.windowID) {
             IdentitiesView()
+                .appAppearance(themes)
         }
         .modelContainer(container)
         .defaultSize(width: 860, height: 560)
@@ -218,10 +217,29 @@ struct TepfasonicApp: App {
                 .environment(updates)
                 .environment(appState)
                 .environment(mcp)
-                .environment(themes)
                 .environment(forwarding)
+                .appAppearance(themes)
         }
         .modelContainer(container)
+    }
+}
+
+/// The look chosen in Settings → Appearance, for every scene: the theme store in
+/// the environment and the accent colour. The light or dark side is set on
+/// `NSApp` by the store, so sheets, menus and panels follow too.
+private struct AppAppearanceModifier: ViewModifier {
+    let themes: ThemeStore
+
+    func body(content: Content) -> some View {
+        content
+            .environment(themes)
+            .tint(themes.appearance.accentColor)
+    }
+}
+
+extension View {
+    func appAppearance(_ themes: ThemeStore) -> some View {
+        modifier(AppAppearanceModifier(themes: themes))
     }
 }
 

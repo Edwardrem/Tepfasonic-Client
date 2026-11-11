@@ -123,6 +123,11 @@ struct AppearanceSettingsView: View {
                 Picker("Appearance", selection: Binding(get: { themes.appearance.app }, set: { themes.setAppAppearance($0) })) {
                     ForEach(ThemeStore.AppAppearance.allCases) { Text($0.displayName).tag($0) }
                 }
+                Text(themes.appearance.app == .matchScheme
+                    ? "Every window, sheet and menu goes light or dark with the colour scheme above, so the sidebar, Files, the Theme Editor and Settings match the terminal."
+                    : "Applies to every window, sheet and menu, not just the main window.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 LabeledContent("Accent colour") {
                     HStack(spacing: 6) {
                         ColorLabelPicker(selection: Binding(get: { themes.appearance.accent }, set: { themes.setAccent($0) }))

@@ -33,18 +33,22 @@ final class ThemeStore {
     }
 
     enum AppAppearance: String, CaseIterable, Identifiable {
+        /// Every window goes light or dark with the colour scheme in use.
+        case matchScheme
         case system, light, dark
         var id: String { rawValue }
         var displayName: String {
             switch self {
-            case .system: "Follow system"
+            case .matchScheme: "Match the colour scheme"
+            case .system: "Follow the system"
             case .light: "Always light"
             case .dark: "Always dark"
             }
         }
+        /// The fixed look, or nil when it depends on the scheme or the system.
         var colorScheme: ColorScheme? {
             switch self {
-            case .system: nil
+            case .matchScheme, .system: nil
             case .light: .light
             case .dark: .dark
             }
@@ -52,12 +56,11 @@ final class ThemeStore {
     }
 
     struct Appearance: Equatable {
-        var app: AppAppearance = .system
+        var app: AppAppearance = .matchScheme
         /// Hex accent colour; nil follows the system accent.
         var accent: String?
         var compactSidebar = false
 
-        var colorScheme: ColorScheme? { app.colorScheme }
         var accentColor: Color? { accent.flatMap(HostColor.color) }
     }
 
@@ -78,7 +81,6 @@ final class ThemeStore {
     private(set) var version = 0
     private(set) var systemIsDark = false
     private var scheduleTimer: Timer?
-    private var appearanceObservation: NSKeyValueObservation?
 
     var globalThemeID: String {
         get { _ = version; return UserDefaults.standard.string(forKey: Self.globalThemeKey) ?? TerminalTheme.defaultDark.id }
@@ -114,10 +116,16 @@ final class ThemeStore {
             accent: UserDefaults.standard.string(forKey: Self.accentKey),
             compactSidebar: UserDefaults.standard.bool(forKey: Self.compactSidebarKey))
         reloadUserThemes()
-        systemIsDark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        appearanceObservation = NSApp?.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
-            Task { @MainActor in self?.systemAppearanceChanged() }
+        systemIsDark = Self.systemPrefersDark
+        // The system setting, not the app's own look: once `NSApp.appearance` is
+        // forced light or dark, `effectiveAppearance` no longer says what macOS is set to.
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.systemAppearanceChanged() }
         }
+        applyWindowAppearance()
+        DispatchQueue.main.async { [weak self] in self?.applyWindowAppearance() }
         scheduleTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.autoSwitch == .schedule else { return }
@@ -150,10 +158,40 @@ final class ThemeStore {
     }
 
     func systemAppearanceChanged() {
-        let dark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let dark = Self.systemPrefersDark
         if dark != systemIsDark {
             systemIsDark = dark
             changed()
+        }
+    }
+
+    /// What macOS is set to in System Settings → Appearance (the global defaults domain).
+    private static var systemPrefersDark: Bool {
+        UserDefaults.standard.string(forKey: "AppleInterfaceStyle")?.caseInsensitiveCompare("dark") == .orderedSame
+    }
+
+    /// The light or dark look every window should have right now: the scheme's own
+    /// when matching it, the system's when following that, or the fixed choice.
+    var effectiveColorScheme: ColorScheme? {
+        switch appearance.app {
+        case .matchScheme: globalTheme.isDark ? .dark : .light
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+
+    /// Pushes the chosen look to every window, sheet, panel and menu at once
+    /// (sessions, Files, Theme Editor, Identities, Settings), not just the main window.
+    private func applyWindowAppearance() {
+        guard let app = NSApp else { return }
+        let wanted: NSAppearance.Name? = switch effectiveColorScheme {
+        case .dark: .darkAqua
+        case .light: .aqua
+        default: nil
+        }
+        if app.appearance?.name != wanted {
+            app.appearance = wanted.flatMap { NSAppearance(named: $0) }
         }
     }
 
@@ -176,6 +214,7 @@ final class ThemeStore {
 
     private func changed() {
         version += 1
+        applyWindowAppearance()
     }
 
     // MARK: Resolution
