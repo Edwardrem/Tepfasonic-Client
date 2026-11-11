@@ -28,7 +28,17 @@ KbdInteractiveAuthentication no
 UsePAM no
 StrictModes no
 LogLevel VERBOSE
+# The live tests connect concurrently and some of them abort on purpose
+# (declined host keys): never drop pending connections at random, and do not
+# penalise 127.0.0.1 for the aborted ones (OpenSSH 9.8+ does by default).
+MaxStartups 100
+PerSourcePenalties no
 CONF
+    # Older sshd has no PerSourcePenalties and refuses the whole file: drop the line then.
+    if ! /usr/sbin/sshd -t -f "$DIR/sshd_config" 2>&1 | grep -q .; then :; elif /usr/sbin/sshd -t -f "$DIR/sshd_config" 2>&1 | grep -qi "PerSourcePenalties"; then
+      sed -i '' '/^PerSourcePenalties/d' "$DIR/sshd_config"
+      echo "sshd here predates PerSourcePenalties; line dropped"
+    fi
     if ! /usr/sbin/sshd -f "$DIR/sshd_config" -E "$DIR/sshd.log"; then
       echo "sshd failed to start; see $DIR/sshd.log" >&2
       tail -5 "$DIR/sshd.log" >&2
