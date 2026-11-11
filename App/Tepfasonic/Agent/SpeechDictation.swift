@@ -41,7 +41,21 @@ final class SpeechDictation {
         self.onUpdate = onUpdate
         errorMessage = nil
         transcript = ""
-        Task { await authorizeAndStart(recognizer) }
+        // Request authorization off the main actor and come back with Task { @MainActor }.
+        // Resuming a @MainActor continuation directly from the TCC permission callback
+        // traps on macOS 26/27 (swift_task_isCurrentExecutorWithFlags →
+        // dispatch_assert_queue_fail), so this path uses no `await` across that callback.
+        Self.requestPermissions { [weak self] outcome in
+            guard let self else { return }
+            switch outcome {
+            case .granted:
+                guard !self.isListening, let recognizer = self.recognizer else { return }
+                self.beginSession(recognizer)
+            case .denied(let message):
+                self.errorMessage = message
+                self.onUpdate = nil
+            }
+        }
     }
 
     func stop() {
@@ -56,21 +70,6 @@ final class SpeechDictation {
     }
 
     // MARK: - Session
-
-    private func authorizeAndStart(_ recognizer: SFSpeechRecognizer) async {
-        guard await Self.requestSpeechAuthorization() else {
-            errorMessage = "Allow Speech Recognition for Tepfasonic in System Settings › Privacy & Security."
-            onUpdate = nil
-            return
-        }
-        guard await AVCaptureDevice.requestAccess(for: .audio) else {
-            errorMessage = "Allow Microphone access for Tepfasonic in System Settings › Privacy & Security."
-            onUpdate = nil
-            return
-        }
-        guard !isListening else { return }   // a stop() may have landed while awaiting
-        beginSession(recognizer)
-    }
 
     private func beginSession(_ recognizer: SFSpeechRecognizer) {
         let request = SFSpeechAudioBufferRecognitionRequest()
@@ -132,10 +131,35 @@ final class SpeechDictation {
         status = .idle
     }
 
-    private static func requestSpeechAuthorization() async -> Bool {
-        if SFSpeechRecognizer.authorizationStatus() == .authorized { return true }
-        return await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
+    // MARK: - Authorization
+
+    private enum PermissionOutcome: Sendable { case granted, denied(String) }
+
+    /// Requests Speech then Microphone access with completion handlers and hands the
+    /// result back on the main actor via `Task { @MainActor }`. The TCC callbacks fire
+    /// on a background queue; nothing here is actor-isolated, so they do no main-actor
+    /// executor check. Crossing that callback with `await` on a `@MainActor` function
+    /// instead traps on macOS 26/27 (`swift_task_isCurrentExecutorWithFlags` →
+    /// `dispatch_assert_queue_fail`), which is what crashed the composer's microphone.
+    private static func requestPermissions(_ completion: @escaping @MainActor (PermissionOutcome) -> Void) {
+        let speechDenied = "Allow Speech Recognition for Tepfasonic in System Settings › Privacy & Security."
+        let micDenied = "Allow Microphone access for Tepfasonic in System Settings › Privacy & Security."
+        @Sendable func finish(_ outcome: PermissionOutcome) { Task { @MainActor in completion(outcome) } }
+        @Sendable func afterSpeech(_ granted: Bool) {
+            guard granted else { finish(.denied(speechDenied)); return }
+            switch AVCaptureDevice.authorizationStatus(for: .audio) {
+            case .authorized:
+                finish(.granted)
+            case .notDetermined:
+                AVCaptureDevice.requestAccess(for: .audio) { finish($0 ? .granted : .denied(micDenied)) }
+            default:
+                finish(.denied(micDenied))
+            }
+        }
+        if SFSpeechRecognizer.authorizationStatus() == .authorized {
+            afterSpeech(true)
+        } else {
+            SFSpeechRecognizer.requestAuthorization { afterSpeech($0 == .authorized) }
         }
     }
 }
