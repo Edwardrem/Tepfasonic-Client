@@ -39,7 +39,8 @@ private func temporaryKnownHosts() -> KnownHostsStore {
     @Test func cancellingThePasswordPromptReturnsToIdle() async throws {
         let session = TerminalSession(
             host: HostDescriptor(name: "box", hostname: "127.0.0.1", port: 1, username: "u", authMethod: .password),
-            knownHosts: temporaryKnownHosts())
+            knownHosts: temporaryKnownHosts(),
+            credentialStore: FakeCredentialStore())   // the Keychain can stall on CI runners
         let connecting = Task { await session.connect() }
         try await waitUntil("password prompt") { session.prompt != nil }
         guard case .password(let respond) = session.prompt else {
@@ -56,7 +57,8 @@ private func temporaryKnownHosts() -> KnownHostsStore {
     @Test func keyHostWithoutIdentityFails() async {
         let session = TerminalSession(
             host: HostDescriptor(name: "box", hostname: "127.0.0.1", port: 1, username: "u", authMethod: .privateKey),
-            knownHosts: temporaryKnownHosts())
+            knownHosts: temporaryKnownHosts(),
+            credentialStore: FakeCredentialStore())   // the Keychain can stall on CI runners
         await session.connect()
         guard case .failed(let message) = session.state else {
             Issue.record("expected .failed, got \(session.state)")
@@ -68,7 +70,8 @@ private func temporaryKnownHosts() -> KnownHostsStore {
     @Test func unreadableKeyFails() async {
         let session = TerminalSession(
             host: HostDescriptor(name: "box", hostname: "127.0.0.1", port: 1, username: "u", authMethod: .privateKey, identity: IdentityDescriptor(name: "missing", kind: .keyFile, privateKeyPath: "/nonexistent/key")),
-            knownHosts: temporaryKnownHosts())
+            knownHosts: temporaryKnownHosts(),
+            credentialStore: FakeCredentialStore())   // the Keychain can stall on CI runners
         await session.connect()
         guard case .failed(let message) = session.state else {
             Issue.record("expected .failed, got \(session.state)")
@@ -80,7 +83,8 @@ private func temporaryKnownHosts() -> KnownHostsStore {
     @Test func disconnectingAnIdleSessionPrintsNoNotice() {
         let session = TerminalSession(
             host: HostDescriptor(name: "box", hostname: "127.0.0.1", port: 1, username: "u"),
-            knownHosts: temporaryKnownHosts())
+            knownHosts: temporaryKnownHosts(),
+            credentialStore: FakeCredentialStore())   // the Keychain can stall on CI runners
         let sink = CollectingSink()
         session.attach(sink)
         session.disconnect()
