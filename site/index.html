@@ -107,6 +107,10 @@
   </section>
 
   <section>
+    <h2>New in 0.3.6</h2>
+    <ul>
+      <li>Hardened dictation against a macOS 26/27 system bug (a crash inside SwiftUI's own hover hit-testing that affects many apps): the composer no longer re-renders the conversation as you type or dictate, and the microphone button no longer animates when recording starts.</li>
+    </ul>
     <h2>New in 0.3.5</h2>
     <ul>
       <li>Fixed a crash: starting dictation in the Claude composer could quit the app the moment macOS returned the microphone or speech permission. The microphone now works without crashing.</li>

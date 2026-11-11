@@ -58,6 +58,14 @@ targets:
         NSPrincipalClass: NSApplication
         NSSupportsAutomaticTermination: false
         NSSupportsSuddenTermination: false
+        # macOS 26/27 workaround. Forces the pre-Swift-6 (thread-based) executor
+        # check, so SwiftUI's own hover hit-testing on the main thread does not
+        # dereference a stale platform-view responder's executor identity and
+        # crash (swift_task_isCurrentExecutorWithFlags → swift_getObjectType, a
+        # system use-after-free that crashes many apps). LaunchServices sets this
+        # before launch; TepfasonicApp also setenv()s it for direct runs.
+        LSEnvironment:
+          SWIFT_IS_CURRENT_EXECUTOR_LEGACY_MODE_OVERRIDE: legacy
         # Fonts in Contents/Resources/Fonts are available to the app (JetBrains Mono, OFL).
         ATSApplicationFontsPath: Fonts
         # Sparkle. SUPublicEDKey is filled in once `generate_keys` has been run
@@ -106,8 +114,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tepfasonic.client
         PRODUCT_NAME: Tepfasonic
-        MARKETING_VERSION: "0.3.5"
-        CURRENT_PROJECT_VERSION: "9"
+        MARKETING_VERSION: "0.3.6"
+        CURRENT_PROJECT_VERSION: "10"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         # Off for ad-hoc builds: the hardened runtime's library validation needs a
