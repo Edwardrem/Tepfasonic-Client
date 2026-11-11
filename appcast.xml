@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Tepfasonic</title>
+    <link>https://edwardrem.github.io/Tepfasonic-Client/</link>
+    <description>Tepfasonic releases</description>
+    <language>en</language>
+    <item>
+      <title>Tepfasonic 0.3.3</title>
+      <link>https://github.com/Edwardrem/Tepfasonic-Client/releases/tag/v0.3.3</link>
+      <sparkle:version>7</sparkle:version>
+      <sparkle:shortVersionString>0.3.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/Edwardrem/Tepfasonic-Client/releases/tag/v0.3.3</sparkle:releaseNotesLink>
+      <pubDate>Wed, 11 Nov 2026 11:14:57 GMT</pubDate>
+      <enclosure url="https://github.com/Edwardrem/Tepfasonic-Client/releases/download/v0.3.3/Tepfasonic-0.3.3.dmg" length="14882442" type="application/octet-stream" sparkle:version="7" sparkle:shortVersionString="0.3.3"/>
+    </item>
+  </channel>
+</rss>
