@@ -33,7 +33,7 @@ Without these the app still checks the feed but offers downloads only.
 
 ### Developer ID signing and notarization (enables in-place updates)
 
-Needs a paid Apple Developer account. Until then CI ships ad-hoc signed builds; the app detects this and keeps updates download-only, because Gatekeeper blocks unsigned auto-installs.
+Needs a paid Apple Developer account. Until then CI ships ad-hoc signed builds; the app detects this and keeps updates download-only, because Gatekeeper blocks unsigned auto-installs. Ad-hoc builds are made without the hardened runtime (`ENABLE_HARDENED_RUNTIME` is off in `project.yml`): with it on, library validation needs a Team ID and the embedded Sparkle framework fails to load. The workflow turns it on only when it signs with the Developer ID, which notarization requires.
 
 - `DEVELOPER_ID_P12`: your "Developer ID Application" certificate exported as `.p12`, base64-encoded (`base64 -i cert.p12 | pbcopy`).
 - `DEVELOPER_ID_P12_PASSWORD`: its password.

@@ -104,7 +104,11 @@ targets:
         CURRENT_PROJECT_VERSION: "2"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
-        ENABLE_HARDENED_RUNTIME: true
+        # Off for ad-hoc builds: the hardened runtime's library validation needs a
+        # Team ID, so an ad-hoc signed app cannot load its embedded Sparkle
+        # framework and dies at launch. release.yml turns it on (YES) when it
+        # signs with a Developer ID, which notarization requires.
+        ENABLE_HARDENED_RUNTIME: false
         # Ad-hoc signing until a Developer ID certificate is available (see docs/PLAN.md).
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
@@ -124,7 +128,7 @@ targets:
         PRODUCT_NAME: tepfasonic-mcp
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
-        ENABLE_HARDENED_RUNTIME: true
+        ENABLE_HARDENED_RUNTIME: false
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
         DEVELOPMENT_TEAM: ""

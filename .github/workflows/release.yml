@@ -74,7 +74,13 @@ jobs:
             MARKETING_VERSION="${{ steps.version.outputs.marketing }}" \
             CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build }}" \
             CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}" \
+            ENABLE_HARDENED_RUNTIME="${{ env.signed == 'true' && 'YES' || 'NO' }}" \
             archive | tail -5
+          # An ad-hoc build must still start: catch a broken bundle before it is published.
+          codesign --verify --deep --strict ".build/Tepfasonic.xcarchive/Products/Applications/${APP_NAME}.app"
+          ".build/Tepfasonic.xcarchive/Products/Applications/${APP_NAME}.app/Contents/MacOS/${APP_NAME}" --version-check & APP_PID=$!
+          sleep 8
+          if kill -0 "$APP_PID" 2>/dev/null; then kill "$APP_PID"; echo "launch check: the app stayed up"; else echo "launch check: the app exited early"; exit 1; fi
           mkdir -p dist
           cp -R ".build/Tepfasonic.xcarchive/Products/Applications/${APP_NAME}.app" dist/
 
