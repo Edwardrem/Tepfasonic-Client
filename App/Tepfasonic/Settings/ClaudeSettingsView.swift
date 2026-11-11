@@ -122,6 +122,7 @@ struct ClaudeSettingsView: View {
             AgentAuditLogSection()
         }
         .formStyle(.grouped)
+        .themedForm()
         .padding(.bottom)
     }
 

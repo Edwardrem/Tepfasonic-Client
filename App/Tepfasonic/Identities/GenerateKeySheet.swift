@@ -79,6 +79,7 @@ struct GenerateKeySheet: View {
                 }
             }
             .formStyle(.grouped)
+            .themedForm()
 
             Divider()
             HStack {

@@ -102,6 +102,7 @@ struct ImportKeySheet: View {
                 }
             }
             .formStyle(.grouped)
+            .themedForm()
 
             Divider()
             HStack {

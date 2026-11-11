@@ -242,6 +242,7 @@ struct HostEditorView: View {
                 }
             }
             .formStyle(.grouped)
+            .themedForm()
 
             Divider()
 

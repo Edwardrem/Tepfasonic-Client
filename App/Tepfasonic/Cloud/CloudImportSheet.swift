@@ -184,6 +184,7 @@ struct CloudSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .padding(.bottom)
         .onAppear(perform: load)
         .onChange(of: provider) { _, _ in load() }

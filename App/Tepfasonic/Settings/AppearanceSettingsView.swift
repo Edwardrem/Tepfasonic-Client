@@ -128,10 +128,16 @@ struct AppearanceSettingsView: View {
                     : "Applies to every window, sheet and menu, not just the main window.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle("Colour the whole app with the scheme", isOn: Binding(get: { themes.appearance.schemeChrome }, set: { themes.setSchemeChrome($0) }))
+                Text(themes.appearance.schemeChrome
+                    ? "The sidebar, tabs, status bar, Claude panel, sheets and windows take their colours from the scheme (Solarized stays Solarized outside the terminal too). The accent is the scheme's blue unless you pick one below."
+                    : "The chrome uses the standard macOS materials; only the terminal shows the scheme.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 LabeledContent("Accent colour") {
                     HStack(spacing: 6) {
                         ColorLabelPicker(selection: Binding(get: { themes.appearance.accent }, set: { themes.setAccent($0) }))
-                        Text(themes.appearance.accent == nil ? "system" : "").font(.caption).foregroundStyle(.secondary)
+                        Text(themes.appearance.accent == nil ? (themes.appearance.schemeChrome ? "from the scheme" : "system") : "").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Picker("Sidebar density", selection: Binding(get: { themes.appearance.compactSidebar }, set: { themes.setCompactSidebar($0) })) {
@@ -144,6 +150,7 @@ struct AppearanceSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .padding(.bottom)
     }
 

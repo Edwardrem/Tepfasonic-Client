@@ -1,9 +1,11 @@
+import AppKit
 import Foundation
 import Observation
 import SwiftData
 import TepfaAgent
 import TepfaCore
 import TepfaTerminal
+import UniformTypeIdentifiers
 
 /// Owns the live `AgentSession`, the conversation it is saved to, and the
 /// scope (one host, a group, or everything) the conversation is about.
@@ -28,7 +30,16 @@ final class AgentPanelController {
     private(set) var setupError: String?
     /// Bumped whenever the saved conversation list changes.
     private(set) var conversationsVersion = 0
+    /// Files attached to the message being written, in the order they were added.
+    private(set) var pendingAttachments: [AgentAttachment] = []
+    /// Why the last file could not be attached.
+    private(set) var attachmentError: String?
     private var providerConfiguration: LLMProviderConfiguration?
+
+    /// Copies of attached files live here, one folder per attachment.
+    static var attachmentsDirectory: URL {
+        AppPaths.applicationSupport.appending(path: "Agent/Attachments", directoryHint: .isDirectory)
+    }
 
     init(toolHost: AppAgentHost, context: ModelContext, workspace: Workspace, settings: AgentSettings = .shared) {
         self.toolHost = toolHost
@@ -116,14 +127,58 @@ final class AgentPanelController {
         conversationsVersion += 1
     }
 
+    // MARK: Attachments
+
+    /// Imports each file (images, PDFs, Word documents, text) into the pending list.
+    func attach(urls: [URL]) {
+        for url in urls {
+            do {
+                let file = try AttachmentImporter.importFile(at: url, into: Self.attachmentsDirectory)
+                pendingAttachments.append(file)
+                attachmentError = nil
+            } catch {
+                attachmentError = error.localizedDescription
+            }
+        }
+    }
+
+    func removeAttachment(_ file: AgentAttachment) {
+        pendingAttachments.removeAll { $0.id == file.id }
+        AttachmentImporter.discard(file)
+        attachmentError = nil
+    }
+
+    /// The standard open panel, limited to what the models can read.
+    func pickFiles() {
+        let panel = NSOpenPanel()
+        panel.title = "Attach Files"
+        panel.message = "Images, PDFs, Word documents and text files such as logs, configs, code and CSV."
+        panel.prompt = "Attach"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.image, .pdf, .text, .sourceCode, .json, .xml, .yaml, .propertyList, .commaSeparatedText, .log, .shellScript, .data]
+        panel.begin { [weak self] response in
+            guard response == .OK else { return }
+            Task { @MainActor in self?.attach(urls: panel.urls) }
+        }
+    }
+
     // MARK: Sending
+
+    var canSend: Bool {
+        session?.isRunning != true
+    }
 
     func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty || !pendingAttachments.isEmpty else { return }
         let session = session ?? makeSession(messages: [])
         self.session = session
         guard session.canSend else { return }
+        let files = pendingAttachments
+        pendingAttachments = []
+        attachmentError = nil
         setupError = nil
         Task {
             do {
@@ -132,8 +187,10 @@ final class AgentPanelController {
                     providerConfiguration = settings.configuration
                 }
                 session.systemPrompt = systemPrompt()
-                session.send(trimmed)
+                session.send(trimmed, attachments: files)
             } catch {
+                // Keep the files so the user can try again once the key is set.
+                pendingAttachments = files + pendingAttachments
                 setupError = error.localizedDescription
             }
         }
@@ -192,6 +249,97 @@ final class AgentPanelController {
         try? context.save()
     }
 }
+
+#if DEBUG
+extension AgentPanelController {
+    /// `--qa-agent-demo`: a finished conversation with two attachments, a tool
+    /// call and a real generated PDF, so the panel can be screenshotted without a key.
+    func seedDemoConversation() {
+        let directory = Self.attachmentsDirectory.appending(path: "demo", directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let imageURL = directory.appending(path: "grafana-disk.png")
+        try? Self.demoImage().write(to: imageURL)
+        let logURL = directory.appending(path: "nginx-error.log")
+        try? Data("2026/11/11 06:12:01 [error] 1182#1182: *44 open() \"/var/www/html/favicon.ico\" failed (2: No such file or directory)\n2026/11/11 06:12:04 [crit] 1182#1182: *45 pwrite() \"/var/cache/nginx/proxy_temp/3/01/0000000013\" failed (28: No space left on device)\n".utf8).write(to: logURL)
+        let image = AgentAttachment(fileName: "grafana-disk.png", mediaType: "image/png", byteCount: (try? Data(contentsOf: imageURL).count) ?? 0, path: imageURL.path)
+        let log = AgentAttachment(fileName: "nginx-error.log", mediaType: "text/plain", byteCount: (try? Data(contentsOf: logURL).count) ?? 0, path: logURL.path)
+
+        let runner = AgentToolRunner(host: toolHost, source: .agentPanel)
+        let report = """
+        ## Summary
+        The root volume on **build-box** is at 91% and nginx has started failing writes to its proxy cache. Two log directories account for most of the growth.
+
+        ## Volumes
+        | Mount | Size | Used | Free | Use |
+        |-------|------|------|------|-----|
+        | / | 80 GB | 73 GB | 7.0 GB | 91% |
+        | /data | 500 GB | 212 GB | 288 GB | 42% |
+
+        ## Largest directories
+        1. `/var/log/nginx` — 18 GB (access logs, no rotation since October)
+        2. `/var/cache/nginx` — 11 GB
+        3. `/home/ubuntu/.cache/pip` — 6 GB
+
+        ## Recommendations
+        - Enable `logrotate` for nginx with 14 days of compressed history.
+        - Clear the pip cache and the stale proxy cache.
+        - Alert at 80% so the next fill-up is caught early.
+
+        > Nothing was changed on the host; every command above was read-only.
+        """
+        let created = (try? runner.createDocument(fileName: "Disk usage report", format: .pdf, title: "Disk usage report — build-box", content: report)) ?? ""
+        let messages: [AgentMessage] = [
+            .user("Here is this morning's Grafana panel and the nginx error log. Check the disks on build-box and give me a PDF report I can send to the team.", attachments: [image, log]),
+            AgentMessage(role: .assistant, blocks: [
+                .text("The log shows nginx failing with *No space left on device*, so I'll start with the volumes on build-box."),
+                .toolUse(id: "demo-1", name: "run_command", input: ["host": "build-box", "command": "df -h / /data && sudo du -xsh /var/log/nginx /var/cache/nginx /home/ubuntu/.cache/pip", "reason": "See which volume is full and what is filling it"]),
+            ], model: "claude-opus-5-5"),
+            AgentMessage(role: .user, blocks: [
+                .toolResult(toolUseID: "demo-1", content: "<command_output host=\"build-box\" exit_status=\"0\" duration_ms=\"412\" truncated=\"false\">\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/sda1        80G   73G  7.0G  91% /\n/dev/sdb1       500G  212G  288G  42% /data\n18G\t/var/log/nginx\n11G\t/var/cache/nginx\n6.0G\t/home/ubuntu/.cache/pip\n</command_output>", isError: false),
+            ]),
+            AgentMessage(role: .assistant, blocks: [
+                .toolUse(id: "demo-2", name: "create_document", input: ["file_name": "Disk usage report", "format": "pdf", "title": "Disk usage report — build-box", "content": .string(report)]),
+            ], model: "claude-opus-5-5"),
+            AgentMessage(role: .user, blocks: [.toolResult(toolUseID: "demo-2", content: created, isError: false)]),
+            AgentMessage(role: .assistant, blocks: [
+                .text("**Disk usage report** is ready. The root volume is at 91%, driven by 18 GB of unrotated nginx access logs and an 11 GB proxy cache; the report lists the volumes, the three largest directories and three fixes, starting with `logrotate`. Nothing was changed on the host."),
+            ], model: "claude-opus-5-5"),
+        ]
+        newConversation()
+        session?.replace(messages: messages)
+    }
+
+    /// A small chart-like PNG standing in for a dashboard screenshot.
+    private static func demoImage() -> Data {
+        let size = CGSize(width: 480, height: 280)
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSColor(srgbRed: 0.09, green: 0.1, blue: 0.14, alpha: 1).setFill()
+            rect.fill()
+            let values: [CGFloat] = [0.42, 0.47, 0.51, 0.58, 0.63, 0.7, 0.74, 0.8, 0.86, 0.91]
+            let path = NSBezierPath()
+            for (index, value) in values.enumerated() {
+                let point = CGPoint(x: 30 + CGFloat(index) * 46, y: 30 + value * 220)
+                if index == 0 { path.move(to: point) } else { path.line(to: point) }
+            }
+            NSColor(srgbRed: 0.42, green: 0.69, blue: 1, alpha: 1).setStroke()
+            path.lineWidth = 3
+            path.stroke()
+            NSColor(srgbRed: 1, green: 0.45, blue: 0.4, alpha: 0.9).setStroke()
+            let limit = NSBezierPath()
+            limit.move(to: CGPoint(x: 20, y: 30 + 0.8 * 220))
+            limit.line(to: CGPoint(x: 460, y: 30 + 0.8 * 220))
+            limit.setLineDash([6, 4], count: 2, phase: 0)
+            limit.lineWidth = 1.5
+            limit.stroke()
+            let label = NSAttributedString(string: "Disk used — / on build-box", attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: NSColor.white])
+            label.draw(at: CGPoint(x: 20, y: 256))
+            return true
+        }
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) else { return Data() }
+        return png
+    }
+}
+#endif
 
 /// Stands in until the real provider is built from settings on the first send.
 private struct PlaceholderProvider: LLMProvider {

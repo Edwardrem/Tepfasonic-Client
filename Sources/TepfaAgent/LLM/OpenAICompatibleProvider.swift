@@ -41,15 +41,23 @@ public struct OpenAICompatibleProvider: LLMProvider {
             switch message.role {
             case .user:
                 var text = ""
+                var parts: [JSONValue] = []
                 for block in message.blocks {
                     switch block {
                     case .text(let value): text += value
                     case .toolResult(let toolUseID, let content, let isError):
                         out.append(["role": "tool", "tool_call_id": .string(toolUseID), "content": .string(isError ? "Error: \(content)" : content)])
+                    case .attachment(let file):
+                        parts.append(attachmentPart(file))
                     default: break
                     }
                 }
-                if !text.isEmpty { out.append(["role": "user", "content": .string(text)]) }
+                if !parts.isEmpty {
+                    if !text.isEmpty { parts.append(["type": "text", "text": .string(text)]) }
+                    out.append(["role": "user", "content": .array(parts)])
+                } else if !text.isEmpty {
+                    out.append(["role": "user", "content": .string(text)])
+                }
             case .assistant:
                 var text = ""
                 var calls: [JSONValue] = []
@@ -67,6 +75,23 @@ public struct OpenAICompatibleProvider: LLMProvider {
             }
         }
         return out
+    }
+
+    /// Images go as data-URI `image_url` parts; PDFs are sent as their text, since
+    /// chat-completions endpoints have no document type; text files go inline.
+    static func attachmentPart(_ file: AgentAttachment) -> JSONValue {
+        guard let data = try? file.data() else {
+            return ["type": "text", "text": .string("[The attachment \(file.fileName) is no longer available on this Mac.]")]
+        }
+        switch file.kind {
+        case .image:
+            return ["type": "image_url", "image_url": ["url": .string("data:\(file.mediaType);base64," + data.base64EncodedString())]]
+        case .pdf:
+            let text = PDFText.extract(from: data) ?? "[no text could be extracted from this PDF]"
+            return ["type": "text", "text": .string("<attachment name=\"\(file.fileName)\" type=\"application/pdf\">\n\(text)\n</attachment>")]
+        case .text:
+            return ["type": "text", "text": .string("<attachment name=\"\(file.fileName)\" type=\"\(file.mediaType)\">\n\(String(decoding: data, as: UTF8.self))\n</attachment>")]
+        }
     }
 
     public func stream(_ request: LLMRequest) -> AsyncThrowingStream<LLMStreamEvent, Error> {

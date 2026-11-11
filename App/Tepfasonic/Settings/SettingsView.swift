@@ -72,6 +72,7 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .padding(.bottom)
     }
 }
@@ -118,6 +119,7 @@ struct UpdatesSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .padding(.bottom)
         .sheet(item: $updates.availableUpdate) { item in
             UpdateAvailableView(item: item)

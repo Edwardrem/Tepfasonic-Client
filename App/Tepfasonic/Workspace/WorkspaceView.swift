@@ -11,7 +11,7 @@ struct WorkspaceView: View {
         VStack(spacing: 0) {
             if showTabBar, !workspace.tabs.isEmpty {
                 TabBarView()
-                Divider()
+                ChromeDivider()
             }
             if let tab = workspace.selectedTab {
                 PaneNodeView(tabID: tab.id, node: tab.tree)
@@ -20,22 +20,42 @@ struct WorkspaceView: View {
                 EmptyWorkspaceView()
             }
             if showStatusBar, let session = workspace.focusedSession {
-                Divider()
+                ChromeDivider()
                 SessionStatusBar(session: session)
             }
         }
+        .panelChrome()
         .navigationTitle(workspace.selectedTab.map { workspace.title(of: $0) } ?? "Tepfasonic")
         .navigationSubtitle(workspace.focusedSession?.host.target ?? "")
     }
 }
 
+/// What the detail column shows before the first session: one tile, one line, the three keys that matter.
 struct EmptyWorkspaceView: View {
+    @Environment(\.palette) private var palette
+
     var body: some View {
-        ContentUnavailableView {
-            Label("No Open Sessions", systemImage: "terminal")
-        } description: {
-            Text("Double-click a host, press ⌘↩ to connect to the selected host, or type user@host in the quick-connect field.")
+        VStack(spacing: 14) {
+            IconTile(systemImage: "terminal", color: palette.accent ?? .accentColor, size: 64)
+                .padding(.bottom, 4)
+            Text("No Open Sessions")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(palette.text)
+            Text("Double-click a host in the sidebar, or type user@host in the quick-connect field.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+            HStack(spacing: 16) {
+                Keycap(keys: "⌘↩", label: "Connect")
+                Keycap(keys: "⌘T", label: "New Tab")
+                Keycap(keys: "⌘K", label: "Search")
+                Keycap(keys: "⌘⇧A", label: "Claude")
+            }
+            .padding(.top, 6)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(palette.background)
     }
 }
 
@@ -67,6 +87,7 @@ struct SplitPaneView<First: View, Second: View>: View {
     @ViewBuilder let first: () -> First
     @ViewBuilder let second: () -> Second
     @Environment(Workspace.self) private var workspace
+    @Environment(\.palette) private var palette
     @State private var dragStartFraction: Double?
 
     private let dividerThickness: CGFloat = 6
@@ -96,7 +117,7 @@ struct SplitPaneView<First: View, Second: View>: View {
 
     private func divider(total: CGFloat) -> some View {
         Rectangle()
-            .fill(Color(nsColor: .separatorColor))
+            .fill(palette.separator)
             .frame(width: axis == .horizontal ? dividerThickness : nil, height: axis == .vertical ? dividerThickness : nil)
             .contentShape(Rectangle())
             .onHover { inside in

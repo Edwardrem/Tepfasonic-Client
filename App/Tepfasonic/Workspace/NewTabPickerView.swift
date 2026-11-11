@@ -30,13 +30,14 @@ struct NewTabPickerView: View {
                     Button {
                         open(host)
                     } label: {
-                        HStack(spacing: 8) {
-                            Circle().fill(HostColor.color(host.colorLabel ?? host.group?.colorLabel) ?? .secondary.opacity(0.4)).frame(width: 8, height: 8)
-                            VStack(alignment: .leading) {
+                        HStack(spacing: 9) {
+                            IconTile(systemImage: "server.rack", color: HostColor.color(host.colorLabel ?? host.group?.colorLabel) ?? HostRow.neutralTile, size: 24)
+                            VStack(alignment: .leading, spacing: 1) {
                                 Text(host.name)
                                 Text(host.displayTarget).font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                        .padding(.vertical, 2)
                     }
                     .buttonStyle(.plain)
                 }

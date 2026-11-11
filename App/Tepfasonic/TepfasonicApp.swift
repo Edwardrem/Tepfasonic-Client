@@ -60,6 +60,7 @@ struct TepfasonicApp: App {
                 .sheet(item: Bindable(updates).availableUpdate) { item in
                     UpdateAvailableView(item: item)
                         .environment(updates)
+                        .themedSheet()
                 }
         }
         .modelContainer(container)
@@ -203,7 +204,7 @@ struct TepfasonicApp: App {
                 .appAppearance(themes)
         }
         .modelContainer(container)
-        .defaultSize(width: 900, height: 620)
+        .defaultSize(width: 1080, height: 680)
 
         Window("Identities & Keys", id: IdentitiesView.windowID) {
             IdentitiesView()
@@ -224,16 +225,20 @@ struct TepfasonicApp: App {
     }
 }
 
-/// The look chosen in Settings → Appearance, for every scene: the theme store in
-/// the environment and the accent colour. The light or dark side is set on
-/// `NSApp` by the store, so sheets, menus and panels follow too.
+/// The look chosen in Settings → Appearance, for every scene: the theme store
+/// and the palette in the environment, the accent colour, and the window
+/// painted with the scheme. The light or dark side is set on `NSApp` by the
+/// store, so sheets, menus and panels follow too.
 private struct AppAppearanceModifier: ViewModifier {
     let themes: ThemeStore
 
     func body(content: Content) -> some View {
+        let palette = themes.palette
         content
             .environment(themes)
-            .tint(themes.appearance.accentColor)
+            .environment(\.palette, palette)
+            .tint(themes.appearance.accentColor ?? palette.accent)
+            .background(WindowChrome(palette: palette))
     }
 }
 

@@ -39,10 +39,10 @@ public final class AgentSession {
 
     public var canSend: Bool { !isRunning }
 
-    public func send(_ text: String) {
+    public func send(_ text: String, attachments: [AgentAttachment] = []) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isRunning else { return }
-        append(.user(trimmed))
+        guard !trimmed.isEmpty || !attachments.isEmpty, !isRunning else { return }
+        append(.user(trimmed, attachments: attachments))
         start()
     }
 

@@ -65,7 +65,14 @@ see "Known limits" for what the libraries underneath cannot do.
   files, which are uploaded again whenever the editor saves them. Transfers
   pipeline 16 requests of 32 KiB and resume from where they stopped.
 - **Claude agent panel** (⌘⇧A): bring your own Anthropic API key (Keychain) or
-  point the panel at any OpenAI-compatible endpoint. Claude gets `list_hosts`,
+  point the panel at any OpenAI-compatible endpoint. Attach files to a message
+  with the paperclip or by dropping them on the panel: images, PDFs, Word
+  documents (sent as their text) and text files such as logs, configs, code
+  and CSV go to the model with your question. Ask for a report and Claude
+  writes it with `create_document` as PDF (paginated, with headings, lists,
+  tables and code blocks), Word `.docx`, HTML, Markdown, text or CSV; the file
+  lands in `Agent/Documents` under the app's data folder and shows up as a
+  card with Open, Show in Finder and Save As…. Claude also gets `list_hosts`,
   `run_command`, `read_file`, `write_file`, `sftp_transfer` and
   `read_terminal_buffer`, runs commands in a dedicated agent tab you can watch
   and stop with Esc, and conversations are saved per host or group.
@@ -98,11 +105,15 @@ see "Known limits" for what the libraries underneath cannot do.
   as the default font; any installed monospace family, size, line height,
   ligatures on or off, bold and italic faces. Block, bar or underline cursor
   with or without blink, anti-aliasing, a minimum contrast ratio so dark text
-  on dark backgrounds stays readable, background opacity with blur. Every
-  window (sessions, Files, the Theme Editor, Identities & Keys, Settings,
-  sheets and menus) goes light or dark with the scheme in use by default, or
-  follows the system appearance, or stays light or dark; the accent is the
-  system's or a custom one, and the sidebar is compact or comfortable. A light
+  on dark backgrounds stays readable, background opacity with blur. The scheme
+  colours the whole app, not just the terminal: the sidebar, tab bar, status
+  bar, Claude panel, cards, sheets and every window background are derived
+  from the scheme's own colours (Solarized Light gives a cream sidebar and the
+  Solarized blue as accent), with a switch in Settings → Appearance to go back
+  to the standard macOS materials. Every window also goes light or dark with
+  the scheme in use by default, or follows the system appearance, or stays
+  light or dark; the accent is the scheme's, the system's or a custom one, and
+  the sidebar is compact or comfortable. A light
   and dark scheme pair swaps with the macOS appearance or on a schedule. Hosts
   and groups override the scheme and font; a badge in a terminal corner shows
   the host, user and session uptime. Themes travel in `.tepfa` files.
@@ -221,7 +232,8 @@ arguments `--seed-demo --window=identities`. Debug builds also take
 `--sidebar=hosts|snippets|history|ports`,
 `--window=identities|settings|export|ssh-config-export|agent|ports|cloud-import|theme-editor|sftp|new-host`,
 `--qa-new-host=<user@host:port>` (the editor, prefilled), `--qa-edit-host=<name>`,
-`--connect=<host name>`, `--qa-type=<text>`, `--qa-approval`,
+`--connect=<host name>`, `--qa-type=<text>`, `--qa-approval`, `--qa-agent-demo`
+(a finished Claude conversation with attachments and a generated PDF),
 `--import=<path>` (add `--qa-import-apply`) and `--qa-export=<path>`. The demo
 data includes a bastion, a host that jumps through it, a production host with
 a tint and watermark, three forwarding rules, a serial profile and a saved

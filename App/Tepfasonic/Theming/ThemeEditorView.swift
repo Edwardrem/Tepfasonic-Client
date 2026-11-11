@@ -58,7 +58,7 @@ struct ThemeEditorView: View {
             load()
         }
         .onChange(of: selectedID) { _, _ in load() }
-        .frame(minWidth: 820, minHeight: 560)
+        .frame(minWidth: 1000, minHeight: 600)
     }
 
     private func row(_ theme: TerminalTheme) -> some View {
@@ -122,6 +122,7 @@ struct ThemeEditorView: View {
                 }
             }
             .formStyle(.grouped)
+            .themedForm()
             .disabled(selectedIsBuiltIn)
             .frame(minWidth: 380)
 
@@ -155,7 +156,7 @@ struct ThemeEditorView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding()
-            .frame(minWidth: 360)
+            .frame(minWidth: 400)
         }
     }
 

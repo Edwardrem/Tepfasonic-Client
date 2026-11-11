@@ -83,6 +83,7 @@ private struct HistoryResultsView: View {
             }
         }
         .listStyle(.sidebar)
+        .themedList()
         .onKeyPress(.return, phases: .down) { press in
             guard press.modifiers.contains(.command), let entry = entries.first(where: { $0.uuid == selection }) else { return .ignored }
             runAgain(entry)

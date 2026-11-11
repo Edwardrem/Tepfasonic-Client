@@ -1,33 +1,53 @@
+import AppKit
 import SwiftUI
 import TepfaAgent
 import TepfaCore
 import TepfaTerminal
+import UniformTypeIdentifiers
 
-/// The Claude panel: scope and conversation pickers, the transcript, and the composer.
+/// The Claude panel: scope and conversation chips, the transcript as message
+/// bubbles, file cards for generated documents, and a composer that takes
+/// attachments from a button or a drop.
 struct AgentPanelView: View {
     @Environment(AgentPanelController.self) private var controller
     @Environment(AppState.self) private var appState
+    @Environment(\.palette) private var palette
     @State private var draft = ""
+    @State private var dropTargeted = false
     @FocusState private var composerFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
-            if let session = controller.session {
+            ChromeDivider()
+            if let session = controller.session, !session.messages.isEmpty || session.isRunning {
                 AgentTranscriptView(session: session)
             } else {
-                ContentUnavailableView {
-                    Label("Ask Claude", systemImage: "sparkles")
-                } description: {
-                    Text("Claude can inspect and operate your hosts with the tools list_hosts, run_command, read_file, write_file, sftp_transfer and read_terminal_buffer. Every command is shown in an agent tab, and the host's permission mode decides what asks first.")
-                }
+                emptyState
             }
-            Divider()
+            ChromeDivider()
             statusLine
             composer
         }
         .frame(minWidth: 320)
+        .overlay {
+            if dropTargeted {
+                Design.shape(Design.radiusLarge)
+                    .strokeBorder(palette.accent ?? .accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                    .padding(6)
+                    .overlay {
+                        Label("Drop to attach", systemImage: "paperclip")
+                            .font(.headline)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(palette.raised, in: Capsule())
+                    }
+                    .allowsHitTesting(false)
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
+            attach(providers)
+        }
         .onAppear {
             controller.focusOnWorkspaceIfIdle()
             composerFocused = true
@@ -58,6 +78,7 @@ struct AgentPanelView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            .pill()
             .help("Which hosts this conversation is about")
             Spacer()
             Menu {
@@ -96,12 +117,18 @@ struct AgentPanelView: View {
                 appState.isShowingAgentPanel = false
             } label: {
                 Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 22, height: 22)
+                    .background(.quaternary, in: Circle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
             .help("Hide the Claude panel (⌘⇧A)")
         }
+        .font(.callout)
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
+        .background(palette.surface)
     }
 
     private var scopeIcon: String {
@@ -112,13 +139,55 @@ struct AgentPanelView: View {
         }
     }
 
+    // MARK: Empty state
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            IconTile(systemImage: "sparkles", color: palette.accent ?? .accentColor, size: 56)
+            Text("Ask Claude")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(palette.text)
+            Text("Claude inspects and operates your hosts over SSH, reads files you attach, and writes reports as PDF or Word. Every command shows in an agent tab, and the host's permission mode decides what asks first.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 340)
+            VStack(spacing: 6) {
+                suggestion("What is using the most disk on \(controller.scopeTitle == "All hosts" ? "each host" : controller.scopeTitle)?")
+                suggestion("Check the nginx error log for the last hour and summarise it.")
+                suggestion("Write a PDF report of CPU, memory and disk for the team.")
+            }
+            .padding(.top, 4)
+            Spacer()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(20)
+    }
+
+    private func suggestion(_ text: String) -> some View {
+        Button {
+            draft = text
+            composerFocused = true
+        } label: {
+            Text(text)
+                .font(.callout)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .card(padding: 10)
+        .frame(maxWidth: 340)
+    }
+
     // MARK: Status and composer
 
     @ViewBuilder
     private var statusLine: some View {
         let session = controller.session
         HStack(spacing: 8) {
-            if let error = controller.setupError ?? session?.lastError {
+            if let error = controller.setupError ?? controller.attachmentError ?? session?.lastError {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 Text(error).lineLimit(2).textSelection(.enabled)
             } else if let session, session.isRunning {
@@ -144,35 +213,86 @@ struct AgentPanelView: View {
         }
         .font(.caption)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            TextField("Ask Claude about \(controller.scopeTitle)…", text: $draft, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(1...8)
-                .focused($composerFocused)
-                .onSubmit(send)
-            Button {
-                send()
-            } label: {
-                Image(systemName: "arrow.up.circle.fill").font(.title2)
+        VStack(alignment: .leading, spacing: 6) {
+            if !controller.pendingAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(controller.pendingAttachments) { file in
+                            AttachmentChip(file: file, onAccent: false) { controller.removeAttachment(file) }
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
             }
-            .buttonStyle(.borderless)
-            .keyboardShortcut(.return, modifiers: .command)
-            .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.session?.isRunning == true)
-            .help("Send (⌘↩)")
+            HStack(alignment: .bottom, spacing: 8) {
+                Button {
+                    controller.pickFiles()
+                } label: {
+                    Image(systemName: "paperclip")
+                        .font(.system(size: 15, weight: .medium))
+                        .frame(width: 30, height: 30)
+                        .background(palette.raised, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Attach images, PDFs, Word documents or text files (or drop them here)")
+                TextField(placeholder, text: $draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...8)
+                    .focused($composerFocused)
+                    .onSubmit(send)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(palette.raised, in: Design.shape(Design.radiusBubble))
+                    .overlay(Design.shape(Design.radiusBubble).strokeBorder(composerFocused ? (palette.accent ?? .accentColor).opacity(0.6) : palette.separator, lineWidth: composerFocused ? 1 : 0.5))
+                Button {
+                    send()
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 28))
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(canSend ? (palette.accent ?? .accentColor) : .secondary)
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(!canSend)
+                .help("Send (⌘↩)")
+            }
         }
         .padding(10)
     }
 
+    private var placeholder: String {
+        controller.pendingAttachments.isEmpty ? "Ask Claude about \(controller.scopeTitle)…" : "Say what to do with the files…"
+    }
+
+    private var canSend: Bool {
+        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !controller.pendingAttachments.isEmpty) && controller.canSend
+    }
+
     private func send() {
+        guard canSend else { return }
         let text = draft
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, controller.session?.isRunning != true else { return }
         draft = ""
         controller.send(text)
+    }
+
+    /// Finder drops arrive as file URLs; everything else is ignored.
+    private func attach(_ providers: [NSItemProvider]) -> Bool {
+        let candidates = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+        guard !candidates.isEmpty else { return false }
+        for provider in candidates {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                Task { @MainActor in controller.attach(urls: [url]) }
+            }
+        }
+        return true
     }
 }
 
@@ -195,7 +315,7 @@ struct AgentTranscriptView: View {
         let results = toolResults
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: 14) {
                     ForEach(session.messages) { message in
                         AgentMessageView(message: message, results: results)
                     }
@@ -204,7 +324,7 @@ struct AgentTranscriptView: View {
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(10)
+                .padding(12)
             }
             .onChange(of: session.messages.count) { _, _ in proxy.scrollTo("bottom") }
             .onChange(of: session.streamingText.count) { _, _ in proxy.scrollTo("bottom") }
@@ -215,19 +335,37 @@ struct AgentTranscriptView: View {
 private struct AgentMessageView: View {
     let message: AgentMessage
     let results: [String: (content: String, isError: Bool)]
+    @Environment(\.palette) private var palette
 
     var body: some View {
         if message.role == .user {
-            HStack {
-                Spacer(minLength: 40)
-                Text(message.text)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(Color.accentColor.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
+            // Tool results travel in user turns but are shown with their tool call.
+            let text = message.text
+            let files = message.attachments
+            if !text.isEmpty || !files.isEmpty {
+                HStack {
+                    Spacer(minLength: 48)
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if !files.isEmpty {
+                            HStack(spacing: 6) {
+                                ForEach(files) { file in
+                                    AttachmentChip(file: file, onAccent: true, onRemove: nil)
+                                }
+                            }
+                        }
+                        if !text.isEmpty {
+                            Text(text)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .foregroundStyle(palette.onAccent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(palette.accent ?? Color.accentColor, in: UnevenRoundedRectangle(topLeadingRadius: Design.radiusBubble, bottomLeadingRadius: Design.radiusBubble, bottomTrailingRadius: 5, topTrailingRadius: Design.radiusBubble, style: .continuous))
+                }
             }
         } else {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(message.blocks.enumerated()), id: \.offset) { _, block in
                     switch block {
                     case .text(let text):
@@ -238,11 +376,12 @@ private struct AgentMessageView: View {
                         Text("Thinking (redacted)").font(.caption).foregroundStyle(.tertiary)
                     case .toolUse(let id, let name, let input):
                         ToolCallView(name: name, input: input, result: results[id])
-                    case .toolResult:
+                    case .toolResult, .attachment:
                         EmptyView()
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -251,7 +390,7 @@ private struct AgentStreamingView: View {
     let session: AgentSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             if !session.streamingThinking.isEmpty {
                 ThinkingView(text: session.streamingThinking, expanded: true)
             }
@@ -262,18 +401,266 @@ private struct AgentStreamingView: View {
     }
 }
 
-/// Inline Markdown (bold, code, links); falls back to plain text.
+// MARK: - Attachments and documents
+
+/// A file on a message or in the composer: thumbnail or icon, name, size.
+struct AttachmentChip: View {
+    let file: AgentAttachment
+    /// Drawn on the accent-coloured user bubble.
+    let onAccent: Bool
+    let onRemove: (() -> Void)?
+    @Environment(\.palette) private var palette
+    @State private var thumbnail: NSImage?
+
+    var body: some View {
+        HStack(spacing: 7) {
+            if let thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 34, height: 34)
+                    .clipShape(Design.shape(7))
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 34, height: 34)
+                    .background(onAccent ? AnyShapeStyle(.white.opacity(0.18)) : AnyShapeStyle(palette.raised), in: Design.shape(7))
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(file.fileName)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(file.note.map { "\(file.sizeDescription) · \($0)" } ?? file.sizeDescription)
+                    .font(.caption2)
+                    .opacity(0.75)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: 160, alignment: .leading)
+            if let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Remove")
+            }
+        }
+        .padding(5)
+        .background(onAccent ? AnyShapeStyle(.white.opacity(0.14)) : AnyShapeStyle(palette.raised), in: Design.shape(Design.radiusMedium))
+        .overlay {
+            if !onAccent { Design.shape(Design.radiusMedium).strokeBorder(palette.separator, lineWidth: 0.5) }
+        }
+        .task(id: file.id) {
+            guard file.kind == .image, !file.isMissing else { return }
+            let url = file.url
+            thumbnail = await Task.detached { NSImage(contentsOf: url) }.value
+        }
+        .help(file.isMissing ? "\(file.fileName) is no longer on this Mac" : file.fileName)
+    }
+
+    private var icon: String {
+        switch file.kind {
+        case .image: "photo"
+        case .pdf: "doc.richtext"
+        case .text: file.fileName.lowercased().hasSuffix(".docx") ? "doc.text" : "doc.plaintext"
+        }
+    }
+}
+
+/// A document the agent wrote: open it, show it in Finder, or save a copy elsewhere.
+struct GeneratedDocumentCard: View {
+    let reference: AgentDocumentReference
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        HStack(spacing: 10) {
+            IconTile(systemImage: icon, color: color, size: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(reference.name)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(reference.exists ? reference.summary : "\(reference.summary) · moved or deleted")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            Button("Open") { NSWorkspace.shared.open(reference.url) }
+                .controlSize(.small)
+                .disabled(!reference.exists)
+            Menu {
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([reference.url]) }
+                Button("Save As…") { saveCopy() }
+                Divider()
+                Button("Copy Path") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(reference.path, forType: .string)
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .disabled(!reference.exists)
+        }
+        .card(padding: 10)
+        .help(reference.path)
+    }
+
+    private var icon: String {
+        switch reference.format {
+        case .pdf: "doc.richtext.fill"
+        case .docx: "doc.text.fill"
+        case .html: "globe"
+        case .md, .txt: "text.alignleft"
+        case .csv: "tablecells.fill"
+        }
+    }
+
+    private var color: Color {
+        switch reference.format {
+        case .pdf: Color(red: 0.93, green: 0.33, blue: 0.3)
+        case .docx: Color(red: 0.17, green: 0.45, blue: 0.85)
+        case .html: Color(red: 0.95, green: 0.55, blue: 0.15)
+        case .md, .txt: Color(red: 0.5, green: 0.53, blue: 0.6)
+        case .csv: Color(red: 0.2, green: 0.65, blue: 0.4)
+        }
+    }
+
+    private func saveCopy() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = reference.name
+        if let type = UTType(filenameExtension: reference.format.fileExtension) { panel.allowedContentTypes = [type] }
+        panel.canCreateDirectories = true
+        panel.begin { response in
+            guard response == .OK, let destination = panel.url else { return }
+            try? FileManager.default.removeItem(at: destination)
+            try? FileManager.default.copyItem(at: reference.url, to: destination)
+        }
+    }
+}
+
+// MARK: - Markdown
+
+/// Block-level Markdown for replies: headings, paragraphs, lists, code, tables and quotes.
 struct MarkdownText: View {
     let text: String
+    @Environment(\.palette) private var palette
 
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-            Text(attributed).textSelection(.enabled)
-        } else {
-            Text(text).textSelection(.enabled)
+        let document = MarkdownDocument(parsing: text)
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(Array(document.blocks.enumerated()), id: \.offset) { _, block in
+                blockView(block)
+            }
         }
+        .foregroundStyle(palette.text)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: MarkdownDocument.Block) -> some View {
+        switch block {
+        case .heading(let level, let inlines):
+            Text(Self.attributed(inlines))
+                .font(level == 1 ? .title3.weight(.semibold) : (level == 2 ? .headline : .subheadline.weight(.semibold)))
+                .padding(.top, 2)
+        case .paragraph(let inlines):
+            Text(Self.attributed(inlines))
+        case .quote(let inlines):
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 1.5).fill(palette.separator).frame(width: 3)
+                Text(Self.attributed(inlines)).foregroundStyle(.secondary)
+            }
+        case .code(_, let code):
+            ScrollView(.horizontal) {
+                Text(code)
+                    .font(.callout.monospaced())
+                    .padding(8)
+            }
+            .background(palette.raised, in: Design.shape(Design.radiusSmall))
+        case .rule:
+            ChromeDivider().padding(.vertical, 2)
+        case .list(let ordered, let items):
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(ordered ? "\(Self.ordinal(items, at: index))." : (item.level == 0 ? "•" : "◦"))
+                            .foregroundStyle(.secondary)
+                            .frame(minWidth: 14, alignment: .trailing)
+                        Text(Self.attributed(item.inlines))
+                    }
+                    .padding(.leading, CGFloat(item.level) * 16)
+                }
+            }
+        case .table(let header, let rows):
+            ScrollView(.horizontal) {
+                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 4) {
+                    GridRow {
+                        ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
+                            Text(Self.attributed(cell)).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                    }
+                    Divider().gridCellUnsizedAxes(.horizontal)
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        GridRow {
+                            ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                                Text(Self.attributed(cell)).font(.callout)
+                            }
+                        }
+                    }
+                }
+                .padding(8)
+            }
+            .background(palette.raised, in: Design.shape(Design.radiusSmall))
+        }
+    }
+
+    private static func ordinal(_ items: [MarkdownDocument.ListItem], at index: Int) -> Int {
+        var count = 0
+        for i in 0...index where items[i].level == items[index].level {
+            if i > 0, let reset = items[..<i].lastIndex(where: { $0.level < items[index].level }), items[(reset + 1)...i].allSatisfy({ $0.level >= items[index].level }) {
+                // Numbering restarts after a shallower item.
+                if items[(reset + 1)..<i].filter({ $0.level == items[index].level }).isEmpty { count = 0 }
+            }
+            count += 1
+        }
+        return count
+    }
+
+    static func attributed(_ inlines: [MarkdownDocument.Inline]) -> AttributedString {
+        var result = AttributedString()
+        for inline in inlines {
+            switch inline {
+            case .text(let text):
+                result += AttributedString(text)
+            case .bold(let text):
+                var piece = AttributedString(text)
+                piece.inlinePresentationIntent = .stronglyEmphasized
+                result += piece
+            case .italic(let text):
+                var piece = AttributedString(text)
+                piece.inlinePresentationIntent = .emphasized
+                result += piece
+            case .code(let text):
+                var piece = AttributedString(text)
+                piece.inlinePresentationIntent = .code
+                result += piece
+            case .link(let text, let url):
+                var piece = AttributedString(text)
+                piece.link = URL(string: url)
+                piece.underlineStyle = .single
+                result += piece
+            }
+        }
+        return result
     }
 }
 
@@ -295,12 +682,19 @@ private struct ThinkingView: View {
     }
 }
 
-/// A tool call with its result, collapsed to one line until clicked.
+/// A tool call with its result, collapsed to one line until clicked. A
+/// finished `create_document` shows the file card instead.
 private struct ToolCallView: View {
     let name: String
     let input: JSONValue
     let result: (content: String, isError: Bool)?
+    @Environment(\.palette) private var palette
     @State private var isExpanded = false
+
+    private var document: AgentDocumentReference? {
+        guard AgentToolName(rawValue: name) == .createDocument, let result, !result.isError else { return nil }
+        return AgentDocumentReference.parse(from: result.content)
+    }
 
     private var summary: String {
         let host = input["host"]?.stringValue ?? ""
@@ -311,6 +705,7 @@ private struct ToolCallView: View {
         case .sftpTransfer: return "\(input["direction"]?.stringValue ?? "transfer") \(input["remote_path"]?.stringValue ?? "")"
         case .readTerminalBuffer: return "terminal on \(host)"
         case .listHosts: return "list hosts"
+        case .createDocument: return "\(input["file_name"]?.stringValue ?? "document") (\(input["format"]?.stringValue ?? "?"))"
         case nil: return name
         }
     }
@@ -328,41 +723,44 @@ private struct ToolCallView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Button {
-                isExpanded.toggle()
-            } label: {
-                HStack(spacing: 6) {
-                    Circle().fill(statusColor).frame(width: 7, height: 7)
-                    Text(name).font(.caption.monospaced()).foregroundStyle(.secondary)
-                    if let host = input["host"]?.stringValue, AgentToolName(rawValue: name) != .listHosts {
-                        Text(host).font(.caption).foregroundStyle(.secondary)
+        if let document {
+            GeneratedDocumentCard(reference: document)
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Button {
+                    isExpanded.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle().fill(statusColor).frame(width: 7, height: 7)
+                        Text(name).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        if let host = input["host"]?.stringValue, AgentToolName(rawValue: name) != .listHosts {
+                            Text(host).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text(summary).font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        if let exitStatus { Text("exit \(exitStatus)").font(.caption2).foregroundStyle(.secondary) }
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right").font(.caption2).foregroundStyle(.tertiary)
                     }
-                    Text(summary).font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    if let exitStatus { Text("exit \(exitStatus)").font(.caption2).foregroundStyle(.secondary) }
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 4) {
-                    if let reason = input["reason"]?.stringValue, !reason.isEmpty {
-                        Text(reason).font(.caption).foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let reason = input["reason"]?.stringValue, !reason.isEmpty {
+                            Text(reason).font(.caption).foregroundStyle(.secondary)
+                        }
+                        ScrollView(.horizontal) {
+                            Text(result?.content ?? "Waiting…")
+                                .font(.caption.monospaced())
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 240)
                     }
-                    ScrollView(.horizontal) {
-                        Text(result?.content ?? "Waiting…")
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 240)
+                    .padding(.leading, 13)
                 }
-                .padding(.leading, 13)
             }
+            .card(padding: 8, radius: Design.radiusSmall)
         }
-        .padding(6)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
     }
 }

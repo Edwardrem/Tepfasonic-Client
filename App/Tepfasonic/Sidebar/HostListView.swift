@@ -32,7 +32,7 @@ struct HostListView: View {
                 } header: {
                     HStack(spacing: 6) {
                         if let color = HostColor.color(group.colorLabel) {
-                            Circle().fill(color).frame(width: 7, height: 7)
+                            RoundedRectangle(cornerRadius: 2.5, style: .continuous).fill(color).frame(width: 9, height: 9)
                         }
                         Text(group.name)
                     }
@@ -63,6 +63,7 @@ struct HostListView: View {
             }
         }
         .listStyle(.sidebar)
+        .themedList()
         .navigationTitle("Hosts")
         .overlay {
             if hosts.isEmpty, serialProfiles.isEmpty {
@@ -196,65 +197,82 @@ struct HostListView: View {
 struct SerialProfileRow: View {
     let profile: SerialProfile
     let sessions: [TerminalSession]
+    @Environment(ThemeStore.self) private var themes
 
     var body: some View {
-        HStack(spacing: 8) {
-            ZStack(alignment: .bottomTrailing) {
-                Image(systemName: "cable.connector")
-                    .foregroundStyle(HostColor.color(profile.colorLabel) ?? .secondary)
-                    .frame(width: 18)
-                if !sessions.isEmpty {
-                    Circle()
-                        .fill(sessions.contains(where: \.isConnected) ? Color.green : (sessions.contains(where: \.isBusy) ? Color.orange : Color.secondary))
-                        .frame(width: 7, height: 7)
-                        .offset(x: 2, y: 2)
+        let compact = themes.appearance.compactSidebar
+        HStack(spacing: compact ? 8 : 10) {
+            IconTile(systemImage: "cable.connector", color: HostColor.color(profile.colorLabel) ?? HostRow.neutralTile, size: compact ? 20 : 28)
+                .overlay(alignment: .bottomTrailing) {
+                    if !sessions.isEmpty {
+                        StatusDot(color: sessions.contains(where: \.isConnected) ? .green : (sessions.contains(where: \.isBusy) ? .orange : .secondary), size: compact ? 6 : 8)
+                            .offset(x: 3, y: 3)
+                    }
                 }
-            }
             VStack(alignment: .leading, spacing: 1) {
-                Text(profile.name).lineLimit(1)
-                Text("\((profile.devicePath as NSString).lastPathComponent) · \(profile.lineSummary)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(profile.name)
+                    .font(compact ? .callout : .body.weight(.medium))
                     .lineLimit(1)
+                if !compact {
+                    Text("\((profile.devicePath as NSString).lastPathComponent) · \(profile.lineSummary)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, compact ? 1 : 3)
     }
 }
 
+/// A host in the sidebar: a coloured icon tile with the connection state in its
+/// corner, the name, and the target underneath (hidden in the compact density).
 struct HostRow: View {
     let host: SSHHost
     let sessions: [TerminalSession]
+    @Environment(ThemeStore.self) private var themes
+
+    /// Hosts without a colour label get a quiet grey tile.
+    static let neutralTile = Color(red: 0.56, green: 0.58, blue: 0.62)
 
     var body: some View {
-        HStack(spacing: 8) {
-            ZStack(alignment: .bottomTrailing) {
-                Image(systemName: "server.rack")
-                    .foregroundStyle(HostColor.color(host.colorLabel ?? host.group?.colorLabel) ?? .secondary)
-                    .frame(width: 18)
-                if !sessions.isEmpty {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 7, height: 7)
-                        .offset(x: 2, y: 2)
+        let compact = themes.appearance.compactSidebar
+        let connected = sessions.filter(\.isConnected).count
+        HStack(spacing: compact ? 8 : 10) {
+            IconTile(systemImage: "server.rack", color: HostColor.color(host.colorLabel ?? host.group?.colorLabel) ?? Self.neutralTile, size: compact ? 20 : 28)
+                .overlay(alignment: .bottomTrailing) {
+                    if !sessions.isEmpty {
+                        StatusDot(color: statusColor, size: compact ? 6 : 8)
+                            .offset(x: 3, y: 3)
+                    }
                 }
-            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(host.name)
+                    .font(compact ? .callout : .body.weight(.medium))
                     .lineLimit(1)
-                Text(host.displayTarget)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if !compact {
+                    Text(host.displayTarget)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
             if sessions.contains(where: \.isBusy) {
                 ProgressView()
                     .controlSize(.mini)
+            } else if connected > 1 {
+                Text("\(connected)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+                    .help("\(connected) terminals connected")
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, compact ? 1 : 3)
     }
 
     private var statusColor: Color {

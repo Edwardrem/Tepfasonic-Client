@@ -274,25 +274,28 @@ private struct VisualEffectBackground: NSViewRepresentable {
 /// Makes the hosting window see-through while any pane uses a translucent background.
 private struct WindowTransparency: NSViewRepresentable {
     let transparent: Bool
+    @Environment(\.palette) private var palette
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { apply(to: view) }
+        let restore = palette.backgroundNSColor
+        DispatchQueue.main.async { apply(to: view, restoring: restore) }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { apply(to: nsView) }
+        let restore = palette.backgroundNSColor
+        DispatchQueue.main.async { apply(to: nsView, restoring: restore) }
     }
 
-    private func apply(to view: NSView) {
+    private func apply(to view: NSView, restoring color: NSColor) {
         guard let window = view.window else { return }
         if transparent {
             window.isOpaque = false
             window.backgroundColor = .clear
         } else if !window.isOpaque {
             window.isOpaque = true
-            window.backgroundColor = .windowBackgroundColor
+            window.backgroundColor = color
         }
     }
 }
@@ -301,6 +304,7 @@ struct SessionStatusBar: View {
     let session: TerminalSession
     @Environment(AppState.self) private var appState
     @Environment(PortForwardingManager.self) private var forwarding
+    @Environment(\.palette) private var palette
     @Environment(\.openWindow) private var openWindow
 
     private var activeForwardCount: Int {
@@ -308,18 +312,18 @@ struct SessionStatusBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
-            Text(statusText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+        HStack(spacing: 8) {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 7, height: 7)
+                Text(statusText)
+                    .lineLimit(1)
+            }
+            .pill()
             if !session.host.routeDescription.isEmpty {
                 Text(session.host.routeDescription)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .help("Connection route")
             }
@@ -344,14 +348,13 @@ struct SessionStatusBar: View {
             }
             if session.hasShellIntegration {
                 Image(systemName: "terminal.fill")
-                    .font(.caption)
                     .foregroundStyle(session.promptPhase == .running ? .orange : .green)
                     .help(session.promptPhase == .running ? "Shell integration active: a command is running" : "Shell integration active: commands are recorded with their exit status")
             }
             if let directory = session.currentDirectory {
                 Text(directory)
                     .font(.caption.monospaced())
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -377,10 +380,12 @@ struct SessionStatusBar: View {
                 Button("Reconnect") { Task { await session.reconnect() } }
             }
         }
+        .font(.caption)
+        .foregroundStyle(palette.text)
         .controlSize(.small)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(.bar)
+        .background(palette.surface)
     }
 
     private var statusColor: Color {

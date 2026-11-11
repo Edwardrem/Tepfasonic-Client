@@ -59,6 +59,7 @@ struct IdentityDetailView: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .onChange(of: identity.name) { _, _ in try? modelContext.save() }
         .onChange(of: identity.username) { _, _ in try? modelContext.save() }
         .sheet(isPresented: $isExportingPrivateKey) {

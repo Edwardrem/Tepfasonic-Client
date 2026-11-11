@@ -107,6 +107,7 @@ struct SerialProfileEditorView: View {
                 }
             }
             .formStyle(.grouped)
+            .themedForm()
             Divider()
             HStack {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)

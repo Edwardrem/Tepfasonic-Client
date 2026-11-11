@@ -55,6 +55,7 @@ struct GroupEditorView: View {
                 AppearanceSection(themeID: $themeID, fontName: $fontName, fontSize: $fontSize, inheritedLabel: "Global setting")
             }
             .formStyle(.grouped)
+            .themedForm()
             Divider()
             HStack {
                 Button("Cancel") { dismiss() }

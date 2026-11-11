@@ -55,6 +55,7 @@ struct SecuritySettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .padding(.bottom)
         .task { refreshCount() }
         .onChange(of: requireAuthentication) { _, value in vault.requireAuthentication = value }

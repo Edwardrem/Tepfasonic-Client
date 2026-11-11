@@ -73,12 +73,30 @@ public struct AnthropicProvider: LLMProvider {
                     blocks.append(["type": "tool_use", "id": .string(id), "name": .string(name), "input": input])
                 case .toolResult(let toolUseID, let content, let isError):
                     blocks.append(["type": "tool_result", "tool_use_id": .string(toolUseID), "content": .string(content), "is_error": .bool(isError)])
+                case .attachment(let file):
+                    if message.role == .user { blocks.append(attachmentBlock(file)) }
                 }
             }
             guard !blocks.isEmpty else { continue }
             out.append(["role": .string(message.role.rawValue), "content": .array(blocks)])
         }
         return .array(out)
+    }
+
+    /// Images go as image blocks, PDFs and text files as document blocks (text
+    /// files with a plain-text source), all read from the app's copy now.
+    static func attachmentBlock(_ file: AgentAttachment) -> JSONValue {
+        guard let data = try? file.data() else {
+            return ["type": "text", "text": .string("[The attachment \(file.fileName) is no longer available on this Mac.]")]
+        }
+        switch file.kind {
+        case .image:
+            return ["type": "image", "source": ["type": "base64", "media_type": .string(file.mediaType), "data": .string(data.base64EncodedString())]]
+        case .pdf:
+            return ["type": "document", "title": .string(file.fileName), "source": ["type": "base64", "media_type": "application/pdf", "data": .string(data.base64EncodedString())]]
+        case .text:
+            return ["type": "document", "title": .string(file.fileName), "source": ["type": "text", "media_type": "text/plain", "data": .string(String(decoding: data, as: UTF8.self))]]
+        }
     }
 
     public func stream(_ request: LLMRequest) -> AsyncThrowingStream<LLMStreamEvent, Error> {

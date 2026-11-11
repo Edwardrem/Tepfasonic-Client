@@ -60,6 +60,8 @@ final class ThemeStore {
         /// Hex accent colour; nil follows the system accent.
         var accent: String?
         var compactSidebar = false
+        /// Colour the sidebar, bars, panel, sheets and windows with the scheme itself.
+        var schemeChrome = true
 
         var accentColor: Color? { accent.flatMap(HostColor.color) }
     }
@@ -73,6 +75,7 @@ final class ThemeStore {
     static let appAppearanceKey = "ui.appearance"
     static let accentKey = "ui.accent"
     static let compactSidebarKey = "ui.compactSidebar"
+    static let schemeChromeKey = "ui.schemeChrome"
 
     private let context: ModelContext
     private(set) var userThemes: [TerminalTheme] = []
@@ -112,9 +115,10 @@ final class ThemeStore {
         self.context = context
         FontCatalog.registerBundledFonts()
         appearance = Appearance(
-            app: AppAppearance(rawValue: UserDefaults.standard.string(forKey: Self.appAppearanceKey) ?? "") ?? .system,
+            app: AppAppearance(rawValue: UserDefaults.standard.string(forKey: Self.appAppearanceKey) ?? "") ?? .matchScheme,
             accent: UserDefaults.standard.string(forKey: Self.accentKey),
-            compactSidebar: UserDefaults.standard.bool(forKey: Self.compactSidebarKey))
+            compactSidebar: UserDefaults.standard.bool(forKey: Self.compactSidebarKey),
+            schemeChrome: UserDefaults.standard.object(forKey: Self.schemeChromeKey) == nil ? true : UserDefaults.standard.bool(forKey: Self.schemeChromeKey))
         reloadUserThemes()
         systemIsDark = Self.systemPrefersDark
         // The system setting, not the app's own look: once `NSApp.appearance` is
@@ -155,6 +159,20 @@ final class ThemeStore {
         appearance.compactSidebar = value
         UserDefaults.standard.set(value, forKey: Self.compactSidebarKey)
         changed()
+    }
+
+    func setSchemeChrome(_ value: Bool) {
+        appearance.schemeChrome = value
+        UserDefaults.standard.set(value, forKey: Self.schemeChromeKey)
+        changed()
+    }
+
+    /// The colours for the app's chrome right now: the global scheme's when
+    /// "colour the whole app" is on, the standard materials otherwise.
+    var palette: AppPalette {
+        _ = version
+        guard appearance.schemeChrome else { return .system }
+        return AppPalette(theme: globalTheme, accentOverride: appearance.accent)
     }
 
     func systemAppearanceChanged() {

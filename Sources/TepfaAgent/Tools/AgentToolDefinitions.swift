@@ -8,6 +8,7 @@ public enum AgentToolName: String, CaseIterable, Sendable {
     case writeFile = "write_file"
     case sftpTransfer = "sftp_transfer"
     case readTerminalBuffer = "read_terminal_buffer"
+    case createDocument = "create_document"
 }
 
 /// One tool as the model and MCP clients see it.
@@ -103,6 +104,20 @@ public enum AgentTools {
                     "max_lines": ["type": "integer", "description": "Lines from the bottom to return. Default 200, maximum 2000.", "minimum": 1, "maximum": 2000],
                 ],
                 "required": ["host"],
+                "additionalProperties": false,
+            ]),
+        AgentToolDefinition(
+            name: AgentToolName.createDocument.rawValue,
+            description: "Writes a file on this Mac for the user from Markdown you compose: a report, summary, runbook, inventory or table. Formats: pdf (paginated, with headings, lists, tables and code blocks), docx (Microsoft Word), html, md, txt and csv. The file is saved in Tepfasonic's documents folder and appears in the panel as a card the user can open, show in Finder or save elsewhere, so tell them it is ready and what it contains. Nothing runs on any host. Gather the facts with the other tools first, then call this once with the whole document in `content`: GitHub-flavoured Markdown with #, ## and ### headings, paragraphs, - bullets, 1. numbered items, **bold**, *italic*, `code`, ``` fenced code blocks, | tables |, > quotes and --- rules. For txt and csv the content is written exactly as given.",
+            inputSchema: [
+                "type": "object",
+                "properties": [
+                    "file_name": ["type": "string", "description": "Name for the file, for example \"Disk usage report\". The extension is added from the format."],
+                    "format": ["type": "string", "enum": ["pdf", "docx", "html", "md", "txt", "csv"], "description": "pdf unless the user asked for Word (docx) or another format."],
+                    "title": ["type": "string", "description": "Title printed at the top of the document and in its metadata. Optional."],
+                    "content": ["type": "string", "description": "The whole document in Markdown (or the exact text for txt and csv)."],
+                ],
+                "required": ["file_name", "format", "content"],
                 "additionalProperties": false,
             ]),
     ]

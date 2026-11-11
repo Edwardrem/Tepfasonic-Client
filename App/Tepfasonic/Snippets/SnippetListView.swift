@@ -64,6 +64,7 @@ struct SnippetListView: View {
                 }
             }
             .listStyle(.sidebar)
+            .themedList()
             .onKeyPress(.return, phases: .down) { press in
                 guard press.modifiers.contains(.command), let snippet = snippets.first(where: { $0.uuid == selection }) else { return .ignored }
                 run(snippet, on: .currentTab)

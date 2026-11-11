@@ -24,6 +24,7 @@ public final class AgentToolRunner {
         case blocked(String)
         case cancelled
         case localFile(String)
+        case document(String)
 
         public var errorDescription: String? {
             switch self {
@@ -34,6 +35,7 @@ public final class AgentToolRunner {
             case .blocked(let reason): "Not allowed: \(reason)"
             case .cancelled: "The action was cancelled."
             case .localFile(let detail): detail
+            case .document(let detail): detail
             }
         }
     }
@@ -44,6 +46,8 @@ public final class AgentToolRunner {
     /// Bytes of stdout/stderr passed to the model per command.
     public var outputLimit = 48 * 1024
     public var defaultTimeout: Duration = .seconds(120)
+    /// Where `create_document` writes: `Agent/Documents` under the app's data folder.
+    public var documentsDirectory: URL = AppPaths.applicationSupport.appending(path: "Agent/Documents", directoryHint: .isDirectory)
 
     public init(host: any AgentToolHost, source: AgentActionSource, conversationID: UUID? = nil) {
         self.host = host
@@ -100,7 +104,55 @@ public final class AgentToolRunner {
                 return "No terminal is open on \(target.name)."
             }
             return "<terminal_buffer host=\"\(xmlEscape(target.name))\" lines=\"\(buffer.split(separator: "\n", omittingEmptySubsequences: false).count)\">\n\(buffer)\n</terminal_buffer>"
+        case .createDocument:
+            let fileName = try string("file_name", in: input)
+            guard let format = DocumentFormat(rawValue: (input["format"]?.stringValue ?? "").lowercased().trimmingCharacters(in: .whitespaces)) else {
+                throw Failure.missingArgument("format (pdf, docx, html, md, txt or csv)")
+            }
+            let content = try string("content", in: input)
+            return try createDocument(fileName: fileName, format: format, title: input["title"]?.stringValue, content: content)
         }
+    }
+
+    // MARK: Documents
+
+    /// Renders the Markdown into `documentsDirectory`, never overwriting an earlier file.
+    public func createDocument(fileName: String, format: DocumentFormat, title: String?, content: String) throws -> String {
+        let stem = Self.documentStem(fileName, format: format)
+        do {
+            try FileManager.default.createDirectory(at: documentsDirectory, withIntermediateDirectories: true)
+        } catch {
+            throw Failure.document("Could not create \(documentsDirectory.path): \(error.localizedDescription)")
+        }
+        var url = documentsDirectory.appending(path: "\(stem).\(format.fileExtension)")
+        var counter = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = documentsDirectory.appending(path: "\(stem) \(counter).\(format.fileExtension)")
+            counter += 1
+        }
+        let rendered: RenderedDocument
+        do {
+            rendered = try DocumentRenderer.render(markdown: content, title: title, format: format, to: url)
+        } catch {
+            throw Failure.document(error.localizedDescription)
+        }
+        let reference = AgentDocumentReference(path: url.path, name: url.lastPathComponent, format: format, byteCount: rendered.byteCount, pageCount: rendered.pageCount)
+        return "Created \(reference.name) (\(reference.summary)) at \(url.path). The user sees it as a card with Open, Show in Finder and Save As…; tell them it is ready and summarise what it contains.\n\(reference.tag)"
+    }
+
+    /// A safe file stem: no directories, no control characters, no doubled extension.
+    static func documentStem(_ name: String, format: DocumentFormat) -> String {
+        var stem = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        stem = stem.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        stem = stem.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }.map(String.init).joined()
+        let lowered = stem.lowercased()
+        for ext in DocumentFormat.allCases.map(\.fileExtension) where lowered.hasSuffix("." + ext) {
+            stem = String(stem.dropLast(ext.count + 1))
+            break
+        }
+        stem = stem.trimmingCharacters(in: CharacterSet(charactersIn: ". "))
+        if stem.isEmpty { stem = "Document" }
+        return String(stem.prefix(120))
     }
 
     // MARK: Tools

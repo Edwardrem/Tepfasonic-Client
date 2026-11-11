@@ -49,6 +49,7 @@ struct PortForwardListView: View {
             }
         }
         .listStyle(.sidebar)
+        .themedList()
         .navigationTitle("Port Forwarding")
         .overlay {
             if rules.isEmpty {

@@ -26,6 +26,17 @@ public struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         AgentMessage(role: .user, blocks: [.text(text)])
     }
 
+    /// A user turn with files: attachments come first so the model reads them before the question.
+    public static func user(_ text: String, attachments: [AgentAttachment]) -> AgentMessage {
+        var blocks: [AgentContentBlock] = attachments.map { .attachment($0) }
+        if !text.isEmpty { blocks.append(.text(text)) }
+        return AgentMessage(role: .user, blocks: blocks)
+    }
+
+    public var attachments: [AgentAttachment] {
+        blocks.compactMap { if case .attachment(let file) = $0 { return file } else { return nil } }
+    }
+
     /// The visible text of the turn.
     public var text: String {
         blocks.compactMap { if case .text(let text) = $0 { return text } else { return nil } }.joined(separator: "\n")
@@ -44,9 +55,11 @@ public enum AgentContentBlock: Codable, Sendable, Equatable {
     case redactedThinking(data: String)
     case toolUse(id: String, name: String, input: JSONValue)
     case toolResult(toolUseID: String, content: String, isError: Bool)
+    /// A file the user attached (user turns only).
+    case attachment(AgentAttachment)
 
     private enum CodingKeys: String, CodingKey {
-        case type, text, signature, data, id, name, input, toolUseID = "tool_use_id", content, isError = "is_error"
+        case type, text, signature, data, id, name, input, toolUseID = "tool_use_id", content, isError = "is_error", file
     }
 
     public init(from decoder: any Decoder) throws {
@@ -62,6 +75,8 @@ public enum AgentContentBlock: Codable, Sendable, Equatable {
             self = .toolUse(id: try container.decode(String.self, forKey: .id), name: try container.decode(String.self, forKey: .name), input: try container.decodeIfPresent(JSONValue.self, forKey: .input) ?? .object([:]))
         case "tool_result":
             self = .toolResult(toolUseID: try container.decode(String.self, forKey: .toolUseID), content: try container.decodeIfPresent(String.self, forKey: .content) ?? "", isError: try container.decodeIfPresent(Bool.self, forKey: .isError) ?? false)
+        case "attachment":
+            self = .attachment(try container.decode(AgentAttachment.self, forKey: .file))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown block type \(other)")
         }
@@ -90,6 +105,9 @@ public enum AgentContentBlock: Codable, Sendable, Equatable {
             try container.encode(toolUseID, forKey: .toolUseID)
             try container.encode(content, forKey: .content)
             try container.encode(isError, forKey: .isError)
+        case .attachment(let file):
+            try container.encode("attachment", forKey: .type)
+            try container.encode(file, forKey: .file)
         }
     }
 }

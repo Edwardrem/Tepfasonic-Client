@@ -6,6 +6,7 @@ import TepfaCore
 /// Approve runs it as shown, editing runs the edited text, Deny tells the model no.
 struct AgentApprovalSheet: View {
     let prompt: AgentApprovalPrompt
+    @Environment(\.palette) private var palette
     @State private var command: String
 
     init(prompt: AgentApprovalPrompt) {
@@ -19,10 +20,8 @@ struct AgentApprovalSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: request.isDestructive ? "exclamationmark.triangle.fill" : "sparkles")
-                    .font(.title)
-                    .foregroundStyle(request.isDestructive ? .red : .accentColor)
+            HStack(spacing: 12) {
+                IconTile(systemImage: request.isDestructive ? "exclamationmark.triangle.fill" : "sparkles", color: request.isDestructive ? .red : (palette.accent ?? .accentColor), size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(request.isDestructive ? "Claude wants to run a destructive command" : "Claude wants to run a command")
                         .font(.headline)
@@ -49,10 +48,11 @@ struct AgentApprovalSheet: View {
                 Text("Command").foregroundStyle(.secondary)
                 TextEditor(text: $command)
                     .font(.body.monospaced())
+                    .scrollContentBackground(.hidden)
                     .frame(minHeight: 64, maxHeight: 160)
-                    .padding(4)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(request.isDestructive ? Color.red.opacity(0.6) : Color(nsColor: .separatorColor)))
+                    .padding(6)
+                    .background(palette.raised, in: Design.shape(Design.radiusMedium))
+                    .overlay(Design.shape(Design.radiusMedium).strokeBorder(request.isDestructive ? Color.red.opacity(0.6) : palette.separator))
                 Text(request.detail)
                     .font(.caption)
                     .foregroundStyle(request.isDestructive ? .red : .secondary)

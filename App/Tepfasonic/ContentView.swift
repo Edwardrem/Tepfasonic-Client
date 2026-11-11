@@ -33,11 +33,11 @@ struct ContentView: View {
                 .controlSize(.small)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                Divider()
+                ChromeDivider()
                 switch appState.sidebarMode {
                 case .hosts:
                     QuickConnectBar()
-                    Divider()
+                    ChromeDivider()
                     HostListView(selection: $appState.selectedHostID)
                 case .snippets:
                     SnippetListView()
@@ -50,38 +50,48 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 400)
             .environment(\.defaultMinListRowHeight, themes.appearance.compactSidebar ? 20 : 28)
             .controlSize(themes.appearance.compactSidebar ? .small : .regular)
+            .sidebarChrome()
         } detail: {
             WorkspaceView()
                 .inspector(isPresented: $appState.isShowingAgentPanel) {
                     AgentPanelView()
                         .inspectorColumnWidth(min: 320, ideal: 420, max: 700)
+                        .panelChrome()
                 }
         }
         .sheet(item: Binding(
             get: { appState.pendingApprovals.first },
             set: { if $0 == nil { appState.pendingApprovals.first?.resume(.denied) } })) { prompt in
             AgentApprovalSheet(prompt: prompt)
+                .themedSheet()
         }
         .sheet(item: $appState.hostEditor) { target in
             HostEditorView(target: target)
+                .themedSheet()
         }
         .sheet(item: $appState.snippetEditor) { target in
             SnippetEditorView(target: target)
+                .themedSheet()
         }
         .sheet(item: $appState.snippetRun) { run in
             RunSnippetSheet(run: run)
+                .themedSheet()
         }
         .sheet(isPresented: Binding(get: { appState.folderEditor != nil }, set: { if !$0 { appState.folderEditor = nil } })) {
             SnippetFolderSheet(folder: appState.folderEditor ?? nil)
+                .themedSheet()
         }
         .sheet(isPresented: $appState.isExporting) {
             ExportSheet()
+                .themedSheet()
         }
         .sheet(isPresented: $appState.isExportingSSHConfig) {
             SSHConfigExportSheet()
+                .themedSheet()
         }
         .sheet(item: $appState.importFlow) { flow in
             ImportSheet(flow: flow)
+                .themedSheet()
         }
         .onChange(of: appState.importRequest) { _, request in
             guard let request else { return }
@@ -99,24 +109,31 @@ struct ContentView: View {
         }
         .sheet(isPresented: $appState.isAddingGroup) {
             GroupEditorView(group: nil)
+                .themedSheet()
         }
         .sheet(item: $appState.groupEditor) { group in
             GroupEditorView(group: group)
+                .themedSheet()
         }
         .sheet(item: $appState.portForwardEditor) { target in
             PortForwardEditorView(target: target)
+                .themedSheet()
         }
         .sheet(item: $appState.serialProfileEditor) { target in
             SerialProfileEditorView(target: target)
+                .themedSheet()
         }
         .sheet(isPresented: $appState.isShowingCloudImport) {
             CloudImportSheet()
+                .themedSheet()
         }
         .sheet(item: $appState.pendingThemeInstall) { pending in
             ThemeInstallSheet(pending: pending)
+                .themedSheet()
         }
         .sheet(isPresented: $appState.isShowingSearch) {
             SearchPaletteView()
+                .themedSheet()
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -199,8 +216,8 @@ struct ContentView: View {
             shouldConnect: { $0.usesIdentity })
     }
 
-    /// `--window=identities|settings|export|ssh-config-export` opens a window at launch (used by UI checks).
-    /// Debug builds also take `--seed-demo`, `--sidebar=hosts|snippets|history`,
+    /// `--window=identities|settings|export|ssh-config-export|agent|…` opens a window at launch (used by UI checks).
+    /// Debug builds also take `--seed-demo`, `--sidebar=hosts|snippets|history`, `--qa-agent-demo`,
     /// `--connect=<host name>` and `--qa-type=<text>` (typed into the new session).
     private func openWindowsRequestedOnLaunch() {
         #if DEBUG
@@ -215,7 +232,7 @@ struct ContentView: View {
             case "agent": appState.isShowingAgentPanel = true
             case "ports": appState.sidebarMode = .ports
             case "cloud-import": appState.isShowingCloudImport = true
-            case "theme-editor": appState.isShowingThemeEditor = true
+            case "theme-editor": openWindow(id: ThemeEditorView.windowID)
             case "new-host": appState.hostEditor = .create
             case "sftp":
                 if let host = hosts.first {
@@ -226,6 +243,11 @@ struct ContentView: View {
             }
         }
         #if DEBUG
+        if CommandLine.arguments.contains("--qa-agent-demo") {
+            // A finished conversation with an attachment and a generated report, for screenshots.
+            appState.isShowingAgentPanel = true
+            agent.seedDemoConversation()
+        }
         if CommandLine.arguments.contains("--qa-approval"), let host = hosts.first {
             // Shows the approval sheet with a sample destructive command (UI checks).
             let info = AgentHostInfo(id: host.uuid, name: host.name, hostname: host.hostname, port: host.port, username: host.username, permission: host.agentPermission)

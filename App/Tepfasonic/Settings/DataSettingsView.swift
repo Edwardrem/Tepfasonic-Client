@@ -47,6 +47,7 @@ struct DataSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .themedForm()
         .padding(.bottom)
         .onAppear { backups = Backups.list() }
         .onChange(of: appState.importRequest) { _, _ in backups = Backups.list() }
