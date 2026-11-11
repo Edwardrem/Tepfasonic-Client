@@ -100,8 +100,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tepfasonic.client
         PRODUCT_NAME: Tepfasonic
-        MARKETING_VERSION: "0.2.0"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "0.2.1"
+        CURRENT_PROJECT_VERSION: "3"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         # Off for ad-hoc builds: the hardened runtime's library validation needs a
