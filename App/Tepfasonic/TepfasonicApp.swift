@@ -91,7 +91,7 @@ struct TepfasonicApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New Host…") { appState.hostEditor = .create }
                     .keyboardShortcut("n", modifiers: .command)
-                Button("New Group…") { appState.isAddingGroup = true }
+                Button("New Group…") { appState.newGroup = NewGroupRequest() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                 Button("New Snippet…") { appState.snippetEditor = .create(folder: nil, command: nil) }
                     .keyboardShortcut("n", modifiers: [.command, .option])
@@ -235,6 +235,7 @@ private struct AppAppearanceModifier: ViewModifier {
     func body(content: Content) -> some View {
         let palette = themes.palette
         content
+            .schemeEdges(palette)
             .environment(themes)
             .environment(\.palette, palette)
             .tint(themes.appearance.accentColor ?? palette.accent)

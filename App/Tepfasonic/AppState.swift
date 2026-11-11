@@ -11,12 +11,15 @@ final class AppState {
         case create
         /// Prefilled from a quick-connect session the user wants to keep.
         case createFrom(HostDescriptor)
+        /// A new host that starts in the given group.
+        case createInGroup(HostGroup)
         case edit(SSHHost)
 
         var id: String {
             switch self {
             case .create: "create"
             case .createFrom(let descriptor): "create-\(descriptor.id.uuidString)"
+            case .createInGroup(let group): "create-in-\(group.uuid.uuidString)"
             case .edit(let host): "edit-\(host.uuid.uuidString)"
             }
         }
@@ -91,7 +94,8 @@ final class AppState {
 
     var selectedHostID: UUID?
     var hostEditor: HostEditorTarget?
-    var isAddingGroup = false
+    /// The "New Group" sheet; hosts listed here join the group once it is created.
+    var newGroup: NewGroupRequest?
     var isShowingSearch = false
     var isShowingNewTabPicker = false
     var sidebarMode: SidebarMode = .hosts
@@ -117,4 +121,10 @@ final class AppState {
     var isShowingThemeEditor = false
     /// A theme fetched from a `tepfasonic://theme?url=` link, waiting for the user to confirm.
     var pendingThemeInstall: PendingThemeInstall?
+}
+
+/// Opens the group editor for a new group, optionally with hosts to put in it.
+struct NewGroupRequest: Identifiable {
+    let id = UUID()
+    var hostIDs: [UUID] = []
 }

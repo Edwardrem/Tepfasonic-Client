@@ -14,8 +14,11 @@ enum DemoData {
         let identityCount = (try? context.fetchCount(FetchDescriptor<Identity>())) ?? 0
         guard hostCount == 0, identityCount == 0 else { return }
 
-        let group = HostGroup(name: "Lab", colorLabel: "#5E9CFF")
+        let group = HostGroup(name: "Lab", sortOrder: 0, colorLabel: "#5E9CFF")
         context.insert(group)
+        let productionGroup = HostGroup(name: "Production", sortOrder: 1, colorLabel: "#FF5F57")
+        context.insert(productionGroup)
+        context.insert(HostGroup(name: "Staging", sortOrder: 2))
 
         do {
             let pair = try SSHKeyPair.generate(.ed25519, comment: "demo@tepfasonic")
@@ -27,7 +30,9 @@ enum DemoData {
             buildBox.jumpHost = bastion
             buildBox.themeID = "builtin:nord"
             context.insert(buildBox)
-            context.insert(SSHHost(name: "router", hostname: "192.168.1.1", username: "admin", authMethod: .privateKey, group: group, identity: admin))
+            context.insert(SSHHost(name: "router", hostname: "192.168.1.1", username: "admin", authMethod: .privateKey, sortOrder: 1, group: group, identity: admin))
+            context.insert(SSHHost(name: "web-01", hostname: "web-01.example.org", username: "deploy", authMethod: .privateKey, tags: ["web"], sortOrder: 0, group: productionGroup, identity: key))
+            context.insert(SSHHost(name: "db-01", hostname: "10.1.0.12", username: "deploy", authMethod: .privateKey, tags: ["db"], sortOrder: 1, group: productionGroup, identity: key))
             let production = SSHHost(name: "example.org", hostname: "example.org", username: "me", authMethod: .password)
             production.backgroundTint = "#FF5F57"
             production.watermark = "PROD"

@@ -22,6 +22,7 @@ struct HostEditorView: View {
     @State private var username = NSUserName()
     @State private var authMethod: AuthMethod = .password
     @State private var groupID: UUID?
+    @State private var isCreatingGroup = false
     @State private var identityID: UUID?
     @State private var tagsText = ""
     @State private var notes = ""
@@ -142,10 +143,22 @@ struct HostEditorView: View {
                     }
                 }
                 Section("Organisation") {
-                    Picker("Group", selection: $groupID) {
-                        Text("None").tag(UUID?.none)
-                        ForEach(groups) { group in
-                            Text(group.name).tag(Optional(group.uuid))
+                    LabeledContent("Group") {
+                        HStack(spacing: 6) {
+                            Picker("Group", selection: $groupID) {
+                                Text("None").tag(UUID?.none)
+                                ForEach(groups) { group in
+                                    Text(group.name).tag(Optional(group.uuid))
+                                }
+                            }
+                            .labelsHidden()
+                            Button {
+                                isCreatingGroup = true
+                            } label: {
+                                Image(systemName: "plus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("New group")
                         }
                     }
                     TextField("Tags", text: $tagsText, prompt: Text("comma, separated"))
@@ -266,6 +279,10 @@ struct HostEditorView: View {
         }
         .frame(width: 520, height: 680)
         .onAppear(perform: load)
+        .sheet(isPresented: $isCreatingGroup) {
+            GroupEditorView(group: nil, onCreate: { groupID = $0.uuid })
+                .themedSheet()
+        }
     }
 
     private func identityLabel(_ identity: Identity) -> String {
@@ -297,6 +314,10 @@ struct HostEditorView: View {
     }
 
     private func load() {
+        if case .createInGroup(let group) = target {
+            groupID = group.uuid
+            return
+        }
         if case .createFrom(let descriptor) = target {
             name = descriptor.name
             hostname = descriptor.hostname
@@ -346,7 +367,7 @@ struct HostEditorView: View {
         let defaultSnippet = snippets.first { $0.uuid == defaultSnippetID }
 
         switch target {
-        case .create, .createFrom:
+        case .create, .createFrom, .createInGroup:
             let host = SSHHost(
                 name: trimmedName.isEmpty ? trimmedHost : trimmedName,
                 hostname: trimmedHost,
@@ -355,6 +376,7 @@ struct HostEditorView: View {
                 authMethod: authMethod,
                 tags: tags,
                 notes: notes,
+                sortOrder: HostGrouping.nextSortOrder(after: allHosts.filter { $0.group?.uuid == group?.uuid }),
                 colorLabel: colorLabel,
                 autoReconnect: autoReconnect,
                 group: group,

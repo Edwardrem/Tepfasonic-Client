@@ -8,6 +8,10 @@ import TepfaTerminal
 /// (identity, jump host, proxy, theme and font).
 struct GroupEditorView: View {
     let group: HostGroup?
+    /// Hosts to put in a new group as soon as it exists (from "Move to Group → New Group…").
+    var addingHostIDs: [UUID] = []
+    /// Called with the group after it is created, for pickers that want to select it.
+    var onCreate: ((HostGroup) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -24,6 +28,7 @@ struct GroupEditorView: View {
     @State private var themeID: String?
     @State private var fontName: String?
     @State private var fontSize: Double?
+    @State private var memberIDs: Set<UUID> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +37,35 @@ struct GroupEditorView: View {
                     TextField("Name", text: $name, prompt: Text("Production, Home lab, …"))
                     LabeledContent("Colour label") {
                         ColorLabelPicker(selection: $colorLabel)
+                    }
+                }
+                Section {
+                    if hosts.isEmpty {
+                        Text("No hosts yet. Add hosts with ⌘N; they can join a group from the host editor, the sidebar menu or by dragging.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(hosts) { host in
+                        Toggle(isOn: membership(host)) {
+                            HStack(spacing: 8) {
+                                IconTile(systemImage: "server.rack", color: HostColor.color(host.colorLabel ?? host.group?.colorLabel) ?? HostRow.neutralTile, size: 20)
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(host.name)
+                                    Text(host.displayTarget).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if let other = host.group, other.uuid != group?.uuid, !memberIDs.contains(host.uuid) {
+                                    Text(other.name).font(.caption).foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                } header: {
+                    Text("Hosts in this group")
+                } footer: {
+                    if !hosts.isEmpty {
+                        Text(memberIDs.isEmpty ? "Tick the hosts that belong here. A host can be in one group at a time." : "\(memberIDs.count) of \(hosts.count) hosts. A host can be in one group at a time.")
                     }
                 }
                 Section("Defaults for hosts in this group") {
@@ -67,12 +101,22 @@ struct GroupEditorView: View {
             }
             .padding()
         }
-        .frame(width: 500, height: 600)
+        .frame(width: 520, height: 640)
         .onAppear(perform: load)
     }
 
+    private func membership(_ host: SSHHost) -> Binding<Bool> {
+        Binding(
+            get: { memberIDs.contains(host.uuid) },
+            set: { isMember in
+                if isMember { memberIDs.insert(host.uuid) } else { memberIDs.remove(host.uuid) }
+            })
+    }
+
     private func load() {
+        memberIDs = Set(addingHostIDs)
         guard let group else { return }
+        memberIDs.formUnion(hosts.filter { $0.group?.uuid == group.uuid }.map(\.uuid))
         name = group.name
         colorLabel = group.colorLabel
         defaultIdentityID = group.defaultIdentity?.uuid
@@ -85,8 +129,9 @@ struct GroupEditorView: View {
 
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let isNew = group == nil
         let target = group ?? {
-            let created = HostGroup(name: trimmed, sortOrder: groups.count)
+            let created = HostGroup(name: trimmed, sortOrder: HostGrouping.nextSortOrder(after: groups))
             modelContext.insert(created)
             return created
         }()
@@ -98,7 +143,12 @@ struct GroupEditorView: View {
         target.themeID = themeID
         target.fontName = fontName
         target.fontSize = fontSize
+        let joining = hosts.filter { memberIDs.contains($0.uuid) && $0.group?.uuid != target.uuid }
+        let leaving = hosts.filter { !memberIDs.contains($0.uuid) && $0.group?.uuid == target.uuid }
+        if !joining.isEmpty { HostGrouping.move(joining, to: target, among: hosts) }
+        if !leaving.isEmpty { HostGrouping.move(leaving, to: nil, among: hosts) }
         try? modelContext.save()
+        if isNew { onCreate?(target) }
         dismiss()
     }
 }

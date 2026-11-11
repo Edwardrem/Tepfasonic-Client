@@ -3,6 +3,7 @@ import TepfaTerminal
 
 /// Tab bar, the selected tab's pane tree, and a status bar for the focused session.
 struct WorkspaceView: View {
+    @Environment(\.palette) private var palette
     @Environment(Workspace.self) private var workspace
     @AppStorage("ui.showTabBar") private var showTabBar = true
     @AppStorage("ui.showStatusBar") private var showStatusBar = true
@@ -10,6 +11,10 @@ struct WorkspaceView: View {
     var body: some View {
         VStack(spacing: 0) {
             if showTabBar, !workspace.tabs.isEmpty {
+                // A scroll view that touches the toolbar edge extends under the
+                // toolbar and gets a backdrop pocket behind the title in full
+                // screen; one point of the bar's own colour keeps it below.
+                palette.surfaceColor.frame(height: 1)
                 TabBarView()
                 ChromeDivider()
             }

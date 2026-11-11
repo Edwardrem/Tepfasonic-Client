@@ -299,6 +299,7 @@ struct AgentPanelView: View {
 // MARK: - Transcript
 
 struct AgentTranscriptView: View {
+    @Environment(\.palette) private var palette
     let session: AgentSession
 
     private var toolResults: [String: (content: String, isError: Bool)] {
@@ -328,6 +329,7 @@ struct AgentTranscriptView: View {
             }
             .onChange(of: session.messages.count) { _, _ in proxy.scrollTo("bottom") }
             .onChange(of: session.streamingText.count) { _, _ in proxy.scrollTo("bottom") }
+            .schemeEdges(palette)
         }
     }
 }

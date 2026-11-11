@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 import TepfaCore
 import TepfaTerminal
+import UniformTypeIdentifiers
 
 struct HostListView: View {
     @Binding var selection: UUID?
@@ -14,36 +15,51 @@ struct HostListView: View {
     @Query(sort: [SortDescriptor(\SSHHost.sortOrder), SortDescriptor(\SSHHost.name)]) private var hosts: [SSHHost]
     @Query(sort: [SortDescriptor(\SerialProfile.sortOrder), SortDescriptor(\SerialProfile.name)]) private var serialProfiles: [SerialProfile]
 
+    /// Collapsed groups, remembered between launches.
+    @AppStorage("sidebar.collapsedGroups") private var collapsedGroupsRaw = ""
+    @State private var dropTarget: UUID?
+    @State private var groupToDelete: HostGroup?
+
     var body: some View {
         List(selection: $selection) {
-            let ungrouped = hosts.filter { $0.group == nil }
+            let ungrouped = HostGrouping.members(of: nil, in: hosts)
             if !ungrouped.isEmpty {
-                Section("Hosts") {
-                    ForEach(ungrouped) { host in
-                        row(for: host)
-                    }
+                Section {
+                    hostRows(ungrouped, in: nil)
+                } header: {
+                    groupHeader(nil, name: "Hosts", color: nil, count: ungrouped.count)
                 }
             }
             ForEach(groups) { group in
-                Section {
-                    ForEach(hosts.filter { $0.group?.uuid == group.uuid }) { host in
-                        row(for: host)
+                let members = HostGrouping.members(of: group, in: hosts)
+                Section(isExpanded: expansion(of: group)) {
+                    hostRows(members, in: group)
+                    if members.isEmpty {
+                        Text("No hosts yet. Drag hosts here or right-click to add one.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .selectionDisabled()
                     }
                 } header: {
-                    HStack(spacing: 6) {
-                        if let color = HostColor.color(group.colorLabel) {
-                            RoundedRectangle(cornerRadius: 2.5, style: .continuous).fill(color).frame(width: 9, height: 9)
+                    groupHeader(group, name: group.name, color: HostColor.color(group.colorLabel), count: members.count)
+                        .contextMenu {
+                            Button("New Host in \(group.name)…") { appState.hostEditor = .createInGroup(group) }
+                            Button("Edit Group…") { appState.groupEditor = group }
+                            Button("Connect to All") {
+                                for host in members { connect(host) }
+                            }
+                            .disabled(members.isEmpty)
+                            Divider()
+                            Button("Move Up") { HostGrouping.move(group, by: -1, among: groups) }
+                                .disabled(groups.first?.uuid == group.uuid)
+                            Button("Move Down") { HostGrouping.move(group, by: 1, among: groups) }
+                                .disabled(groups.last?.uuid == group.uuid)
+                            Divider()
+                            Button("Delete Group…", role: .destructive) {
+                                if members.isEmpty { delete(group) } else { groupToDelete = group }
+                            }
                         }
-                        Text(group.name)
-                    }
-                    .contextMenu {
-                        Button("Edit Group…") { appState.groupEditor = group }
-                        Button("Connect to All") {
-                            for host in hosts.filter({ $0.group?.uuid == group.uuid }) { connect(host) }
-                        }
-                        Divider()
-                        Button("Delete Group", role: .destructive) { delete(group) }
-                    }
                 }
             }
             if !serialProfiles.isEmpty {
@@ -78,6 +94,85 @@ struct HostListView: View {
             connect(host)
             return .handled
         }
+        .confirmationDialog(
+            "Delete the group “\(groupToDelete?.name ?? "")”?",
+            isPresented: Binding(get: { groupToDelete != nil }, set: { if !$0 { groupToDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: groupToDelete
+        ) { group in
+            Button("Delete Group", role: .destructive) { delete(group) }
+            Button("Cancel", role: .cancel) {}
+        } message: { group in
+            let count = HostGrouping.members(of: group, in: hosts).count
+            Text("Its \(count) \(count == 1 ? "host is" : "hosts are") kept and move back to Hosts.")
+        }
+    }
+
+    /// The rows of one group: reorderable by drag, and a drop target for hosts
+    /// dragged from other groups.
+    @ViewBuilder
+    private func hostRows(_ members: [SSHHost], in group: HostGroup?) -> some View {
+        ForEach(members) { host in
+            row(for: host)
+        }
+        .onMove { source, destination in
+            HostGrouping.reorder(members, fromOffsets: source, toOffset: destination)
+        }
+        .onInsert(of: [HostDrag.type]) { index, providers in
+            HostDrag.loadIDs(from: providers) { ids in drop(ids, into: group, at: index) }
+        }
+    }
+
+    private func groupHeader(_ group: HostGroup?, name: String, color: Color?, count: Int) -> some View {
+        let isTarget = dropTarget == (group?.uuid ?? Self.ungroupedDropID)
+        return HStack(spacing: 6) {
+            if let color {
+                RoundedRectangle(cornerRadius: 2.5, style: .continuous).fill(color).frame(width: 9, height: 9)
+            }
+            Text(name)
+            if group != nil, count > 0 {
+                Text("\(count)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(isTarget ? Color.accentColor.opacity(0.22) : Color.clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .contentShape(Rectangle())
+        .onDrop(of: [HostDrag.type], isTargeted: Binding(
+            get: { isTarget },
+            set: { dropTarget = $0 ? (group?.uuid ?? Self.ungroupedDropID) : (isTarget ? nil : dropTarget) })
+        ) { providers in
+            HostDrag.loadIDs(from: providers) { ids in drop(ids, into: group, at: nil) }
+            return true
+        }
+    }
+
+    private static let ungroupedDropID = UUID()
+
+    private func expansion(of group: HostGroup) -> Binding<Bool> {
+        Binding(
+            get: { !collapsedGroups.contains(group.uuid.uuidString) },
+            set: { expanded in
+                var set = collapsedGroups
+                if expanded { set.remove(group.uuid.uuidString) } else { set.insert(group.uuid.uuidString) }
+                collapsedGroupsRaw = set.sorted().joined(separator: ",")
+            })
+    }
+
+    private var collapsedGroups: Set<String> {
+        Set(collapsedGroupsRaw.split(separator: ",").map(String.init))
+    }
+
+    private func drop(_ ids: [UUID], into group: HostGroup?, at index: Int?) {
+        let moving = ids.compactMap { id in hosts.first { $0.uuid == id } }
+        guard !moving.isEmpty else { return }
+        HostGrouping.move(moving, to: group, at: index, among: hosts)
+        if let group, collapsedGroups.contains(group.uuid.uuidString) { expansion(of: group).wrappedValue = true }
     }
 
     private var selectedHost: SSHHost? {
@@ -87,6 +182,7 @@ struct HostListView: View {
     private func row(for host: SSHHost) -> some View {
         HostRow(host: host, sessions: workspace.sessions(forHost: host.uuid))
             .tag(host.uuid)
+            .itemProvider { HostDrag.provider(for: [host.uuid]) }
             .simultaneousGesture(TapGesture(count: 2).onEnded {
                 selection = host.uuid
                 connect(host)
@@ -113,12 +209,14 @@ struct HostListView: View {
                 Button("Edit…") { appState.hostEditor = .edit(host) }
                 Button("Duplicate") { duplicate(host) }
                 Menu("Move to Group") {
-                    Button("None") { host.group = nil }
+                    Button("None") { HostGrouping.move([host], to: nil, among: hosts) }
                         .disabled(host.group == nil)
                     ForEach(groups) { group in
-                        Button(group.name) { host.group = group }
+                        Button(group.name) { HostGrouping.move([host], to: group, among: hosts) }
                             .disabled(host.group?.uuid == group.uuid)
                     }
+                    Divider()
+                    Button("New Group…") { appState.newGroup = NewGroupRequest(hostIDs: [host.uuid]) }
                 }
                 Divider()
                 Button("Delete", role: .destructive) { delete(host) }

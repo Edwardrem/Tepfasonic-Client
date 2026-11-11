@@ -18,12 +18,16 @@ see "Known limits" for what the libraries underneath cannot do.
 
 - **Host manager**: hosts with groups, tags, colour labels, notes, a snippet to
   run on connect, per-host theme and font, a background tint and a watermark
-  for production boxes. Groups set defaults (identity, jump host, proxy,
-  theme, font) that hosts inherit unless they override them. Quick-connect
-  (`user@host:port`) with an offer to save afterwards, ⌘K search across hosts,
-  serial consoles, snippets and history, and a context menu with connect,
-  connect in new window, browse files, port forwarding, duplicate, edit, move
-  to group and delete.
+  for production boxes. Groups are projects: create them from the sidebar's
+  `+` menu, ⇧⌘N or a host's *Move to Group → New Group…*, tick the hosts that
+  belong in the group editor, drag hosts between groups or onto a group
+  header, reorder hosts and groups, collapse groups, and add a host straight
+  into a group from its context menu. Groups set defaults (identity, jump
+  host, proxy, theme, font) that hosts inherit unless they override them.
+  Quick-connect (`user@host:port`) with an offer to save afterwards, ⌘K search
+  across hosts, serial consoles, snippets and history, and a context menu with
+  connect, connect in new window, browse files, port forwarding, duplicate,
+  edit, move to group and delete.
 - **Identities & Keys** window (⌘⇧I): generate Ed25519, ECDSA P-256/384/521 and
   RSA 3072/4096 keys; import OpenSSH, PEM (PKCS#1, PKCS#8, SEC1) and PuTTY
   `.ppk` (v2 and v3) keys from a file or the clipboard; copy or export the

@@ -107,8 +107,8 @@ struct ContentView: View {
                 #endif
             }
         }
-        .sheet(isPresented: $appState.isAddingGroup) {
-            GroupEditorView(group: nil)
+        .sheet(item: $appState.newGroup) { request in
+            GroupEditorView(group: nil, addingHostIDs: request.hostIDs)
                 .themedSheet()
         }
         .sheet(item: $appState.groupEditor) { group in
@@ -155,12 +155,18 @@ struct ContentView: View {
             ToolbarItem(placement: .primaryAction) {
                 switch appState.sidebarMode {
                 case .hosts:
-                    Button {
-                        appState.hostEditor = .create
+                    Menu {
+                        Button("New Host…") { appState.hostEditor = .create }
+                            .keyboardShortcut("n", modifiers: .command)
+                        Button("New Group…") { appState.newGroup = NewGroupRequest() }
+                            .keyboardShortcut("n", modifiers: [.command, .shift])
+                        Button("New Serial Console…") { appState.serialProfileEditor = .create }
                     } label: {
                         Label("New Host", systemImage: "plus")
+                    } primaryAction: {
+                        appState.hostEditor = .create
                     }
-                    .help("New Host (⌘N)")
+                    .help("New Host (⌘N); the arrow adds a group or a serial console")
                 case .snippets:
                     Menu {
                         Button("New Snippet…") { appState.snippetEditor = .create(folder: nil, command: nil) }
@@ -233,7 +239,25 @@ struct ContentView: View {
             case "ports": appState.sidebarMode = .ports
             case "cloud-import": appState.isShowingCloudImport = true
             case "theme-editor": openWindow(id: ThemeEditorView.windowID)
+            case "fullscreen":
+                // Enter full screen once the main window exists, then dump the
+                // window tree four seconds later so the full-screen toolbar is in it.
+                Task { @MainActor in
+                    for _ in 0..<60 {
+                        if let window = NSApp.windows.first(where: { $0.isVisible && $0.styleMask.contains(.titled) }) {
+                            window.toggleFullScreen(nil)
+                            try? await Task.sleep(for: .seconds(4))
+                            #if DEBUG
+                            QADump.windows()
+                            QADump.titleRegion()
+                            #endif
+                            break
+                        }
+                        try? await Task.sleep(for: .milliseconds(500))
+                    }
+                }
             case "new-host": appState.hostEditor = .create
+            case "new-group": appState.newGroup = NewGroupRequest()
             case "sftp":
                 if let host = hosts.first {
                     appState.sftpHostID = host.uuid

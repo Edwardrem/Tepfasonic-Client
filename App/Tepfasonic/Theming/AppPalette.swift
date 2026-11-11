@@ -142,24 +142,72 @@ extension EnvironmentValues {
 struct WindowChrome: NSViewRepresentable {
     let palette: AppPalette
 
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { apply(to: view) }
+        let coordinator = context.coordinator
+        DispatchQueue.main.async { apply(to: view, coordinator: coordinator) }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { apply(to: nsView) }
+        let coordinator = context.coordinator
+        DispatchQueue.main.async { apply(to: nsView, coordinator: coordinator) }
     }
 
-    private func apply(to view: NSView) {
+    private func apply(to view: NSView, coordinator: Coordinator) {
         guard let window = view.window else { return }
+        coordinator.attach(to: window, fromScheme: palette.fromScheme)
         // A translucent terminal owns the window background while it is see-through.
         guard window.isOpaque else { return }
         let color = palette.fromScheme ? palette.backgroundNSColor : NSColor.windowBackgroundColor
         if window.backgroundColor != color { window.backgroundColor = color }
         let transparentTitlebar = palette.fromScheme && window.toolbarStyle != .preference
         if window.titlebarAppearsTransparent != transparentTitlebar { window.titlebarAppearsTransparent = transparentTitlebar }
+    }
+
+    /// Follows the window in and out of full screen. There the toolbar is a
+    /// separate transparent window and AppKit paints a dark backdrop behind
+    /// the title for legibility, which fights the scheme colour; the tab bar
+    /// and status bar name the host anyway, so the title is hidden until the
+    /// window leaves full screen.
+    @MainActor
+    final class Coordinator {
+        private weak var window: NSWindow?
+        // Tokens only; removed in deinit, which Swift 6 does not isolate.
+        nonisolated(unsafe) private var observers: [any NSObjectProtocol] = []
+        private var titleObservation: NSKeyValueObservation?
+        private var fromScheme = false
+
+        deinit {
+            for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        }
+
+        func attach(to window: NSWindow, fromScheme: Bool) {
+            self.fromScheme = fromScheme
+            if self.window !== window {
+                self.window = window
+                for observer in observers { NotificationCenter.default.removeObserver(observer) }
+                observers = [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification].map { name in
+                    NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                        MainActor.assumeIsolated { self?.applyTitleVisibility() }
+                    }
+                }
+                // SwiftUI resets the visibility when the navigation title changes.
+                titleObservation = window.observe(\.title) { [weak self] _, _ in
+                    DispatchQueue.main.async { self?.applyTitleVisibility() }
+                }
+            }
+            applyTitleVisibility()
+        }
+
+        private func applyTitleVisibility() {
+            guard let window else { return }
+            let hide = fromScheme && window.styleMask.contains(.fullScreen) && window.toolbarStyle != .preference
+            let wanted: NSWindow.TitleVisibility = hide ? .hidden : .visible
+            if window.titleVisibility != wanted { window.titleVisibility = wanted }
+        }
     }
 }
 
@@ -173,6 +221,7 @@ private struct ThemedListModifier: ViewModifier {
             content
                 .scrollContentBackground(.hidden)
                 .background(palette.surfaceColor)
+                .schemeEdges(palette)
         } else {
             content
         }
@@ -184,7 +233,7 @@ private struct ThemedFormModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if palette.fromScheme {
-            content.scrollContentBackground(.hidden)
+            content.scrollContentBackground(.hidden).schemeEdges(palette)
         } else {
             content
         }
@@ -204,7 +253,7 @@ private struct SidebarChromeModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if palette.fromScheme {
-            content.background(palette.surfaceColor.ignoresSafeArea())
+            content.background(palette.surfaceColor.ignoresSafeArea()).schemeEdges(palette)
         } else {
             content
         }
@@ -216,7 +265,24 @@ private struct PanelChromeModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if palette.fromScheme {
-            content.background(palette.background.ignoresSafeArea())
+            content.background(palette.background.ignoresSafeArea()).schemeEdges(palette)
+        } else {
+            content
+        }
+    }
+}
+
+/// macOS 26 gives every scroll view a "scroll edge" pocket under the toolbar.
+/// In full screen the toolbar is its own transparent window, so that pocket
+/// paints neutral grey over the scheme colour (behind the title, or across the
+/// sidebar's top). With scheme-coloured chrome the surfaces are opaque anyway,
+/// so the effect is switched off.
+private struct SchemeEdgeModifier: ViewModifier {
+    let hidden: Bool
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *), hidden {
+            content.scrollEdgeEffectHidden(true, for: .all)
         } else {
             content
         }
@@ -224,6 +290,8 @@ private struct PanelChromeModifier: ViewModifier {
 }
 
 extension View {
+    /// Hides the toolbar scroll-edge effect while the scheme colours the chrome.
+    func schemeEdges(_ palette: AppPalette) -> some View { modifier(SchemeEdgeModifier(hidden: palette.fromScheme)) }
     /// Sidebar-style lists: the scheme's surface colour instead of the vibrancy.
     func themedList() -> some View { modifier(ThemedListModifier()) }
     /// Grouped forms: let the window colour show behind the sections.

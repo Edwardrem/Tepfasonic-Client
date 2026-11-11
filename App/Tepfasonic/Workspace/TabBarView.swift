@@ -18,6 +18,7 @@ struct TabBarView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
             }
+            .schemeEdges(palette)
             Button {
                 appState.isShowingNewTabPicker = true
             } label: {
