@@ -51,6 +51,10 @@ targets:
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "Copyright © 2026 Rufaro Edward Mutepfa. MIT License."
+        # Dictation in the Claude composer. Transcription is on-device
+        # (requiresOnDeviceRecognition), so audio never leaves the Mac.
+        NSMicrophoneUsageDescription: "Tepfasonic uses the microphone only while you dictate a message to Claude."
+        NSSpeechRecognitionUsageDescription: "Dictation transcribes your speech on this Mac so you can talk to Claude instead of typing. Audio is not sent to Apple."
         NSPrincipalClass: NSApplication
         NSSupportsAutomaticTermination: false
         NSSupportsSuddenTermination: false
@@ -96,6 +100,8 @@ targets:
         # App Store distribution.
         com.apple.security.app-sandbox: false
         com.apple.security.network.client: true
+        # Microphone for composer dictation (required under the hardened runtime).
+        com.apple.security.device.audio-input: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tepfasonic.client

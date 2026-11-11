@@ -14,6 +14,7 @@ struct AgentPanelView: View {
     @Environment(\.palette) private var palette
     @State private var draft = ""
     @State private var dropTargeted = false
+    @State private var dictation = SpeechDictation()
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -264,6 +265,20 @@ struct AgentPanelView: View {
                     .padding(.vertical, 7)
                     .background(palette.raised, in: Design.shape(Design.radiusBubble))
                     .overlay(Design.shape(Design.radiusBubble).strokeBorder(composerFocused ? (palette.accent ?? .accentColor).opacity(0.6) : palette.separator, lineWidth: composerFocused ? 1 : 0.5))
+                if dictation.isAvailable {
+                    Button {
+                        toggleDictation()
+                    } label: {
+                        Image(systemName: dictation.isListening ? "stop.circle.fill" : "mic.fill")
+                            .font(.system(size: dictation.isListening ? 20 : 15, weight: .medium))
+                            .frame(width: 30, height: 30)
+                            .background(dictation.isListening ? Color.red.opacity(0.16) : palette.raised, in: Circle())
+                            .foregroundStyle(dictation.isListening ? Color.red : .secondary)
+                            .symbolEffect(.pulse, isActive: dictation.isListening)
+                    }
+                    .buttonStyle(.plain)
+                    .help(dictation.isListening ? "Stop dictation" : "Dictate your message — speech stays on this Mac")
+                }
                 Button {
                     send()
                 } label: {
@@ -277,12 +292,31 @@ struct AgentPanelView: View {
                 .disabled(!canSend)
                 .help("Send (⌘↩)")
             }
+            if let message = dictation.errorMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 2)
+            }
         }
         .padding(10)
     }
 
+    private func toggleDictation() {
+        guard !dictation.isListening else {
+            dictation.stop()
+            composerFocused = true
+            return
+        }
+        let base = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        dictation.start { transcript in
+            draft = base.isEmpty ? transcript : base + " " + transcript
+        }
+    }
+
     private var placeholder: String {
-        controller.pendingAttachments.isEmpty ? "Ask Claude about \(controller.scopeTitle)…" : "Say what to do with the files…"
+        if dictation.isListening { return "Listening…" }
+        return controller.pendingAttachments.isEmpty ? "Ask Claude about \(controller.scopeTitle)…" : "Say what to do with the files…"
     }
 
     private var canSend: Bool {
