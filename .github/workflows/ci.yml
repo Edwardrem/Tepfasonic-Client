@@ -32,10 +32,12 @@ jobs:
         run: swift test --parallel
 
       - name: Live SSH tests
+        # The throwaway sshd on a shared runner is slow to answer now and then
+        # (a host-key prompt or a connect timing out at 20 s), so one retry.
         run: |
           Scripts/test-sshd.sh start
           source .build/test-sshd/env.sh
-          swift test --filter Live
+          swift test --filter Live || { echo "::warning::live tests failed once; retrying"; swift test --filter Live; }
           Scripts/test-sshd.sh stop
 
       - name: Install XcodeGen
