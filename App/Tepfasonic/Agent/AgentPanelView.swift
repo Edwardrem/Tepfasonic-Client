@@ -59,17 +59,31 @@ struct AgentPanelView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Menu {
-                Button("All hosts") { controller.focus(.all) }
+                Button {
+                    controller.focus(.all)
+                } label: {
+                    Label("All hosts (\(controller.hosts.count))", systemImage: "server.rack")
+                }
+                // A group scopes the conversation to its hosts: Claude sees only
+                // those and the tools run only there.
                 if !controller.groups.isEmpty {
                     Section("Groups") {
                         ForEach(controller.groups) { group in
-                            Button(group.name) { controller.focus(.group(group.uuid)) }
+                            Button {
+                                controller.focus(.group(group.uuid))
+                            } label: {
+                                Label("\(group.name) (\(group.hosts.count))", systemImage: "folder")
+                            }
                         }
                     }
                 }
                 Section("Hosts") {
                     ForEach(controller.hosts) { host in
-                        Button(host.name) { controller.focus(.host(host.uuid)) }
+                        Button {
+                            controller.focus(.host(host.uuid))
+                        } label: {
+                            Label(host.name, systemImage: "desktopcomputer")
+                        }
                     }
                 }
             } label: {

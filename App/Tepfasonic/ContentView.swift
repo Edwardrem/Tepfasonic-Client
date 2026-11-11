@@ -6,6 +6,7 @@ import TepfaCore
 import TepfaTerminal
 
 struct ContentView: View {
+    @Environment(\.palette) private var palette
     @Environment(AppState.self) private var appState
     @Environment(Workspace.self) private var workspace
     @Environment(AgentPanelController.self) private var agent
@@ -18,11 +19,19 @@ struct ContentView: View {
     @Query private var forwardRules: [PortForwardRule]
     @State private var restored = false
     @State private var saveTask: Task<Void, Never>?
+    @State private var isFullScreen = false
+    @State private var columns: NavigationSplitViewVisibility = .all
+
+    /// Full screen under scheme chrome: the toolbar is hidden and the columns draw header rows.
+    private var fullScreenChrome: Bool { isFullScreen && palette.fromScheme }
 
     var body: some View {
         @Bindable var appState = appState
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             VStack(spacing: 0) {
+                if fullScreenChrome {
+                    FullScreenSidebarHeader { columns = .detailOnly }
+                }
                 Picker("Sidebar", selection: $appState.sidebarMode) {
                     ForEach(AppState.SidebarMode.allCases) { mode in
                         Image(systemName: mode.systemImage).tag(mode).help(mode.title)
@@ -52,7 +61,19 @@ struct ContentView: View {
             .controlSize(themes.appearance.compactSidebar ? .small : .regular)
             .sidebarChrome()
         } detail: {
-            WorkspaceView()
+            VStack(spacing: 0) {
+                if fullScreenChrome {
+                    FullScreenDetailHeader(
+                        title: workspace.selectedTab.map { workspace.title(of: $0) } ?? "Tepfasonic",
+                        subtitle: workspace.focusedSession?.host.target ?? "",
+                        showsSidebarToggle: columns == .detailOnly,
+                        showSidebar: { columns = .all }
+                    ) {
+                        headerControls
+                    }
+                }
+                WorkspaceView()
+            }
                 .inspector(isPresented: $appState.isShowingAgentPanel) {
                     AgentPanelView()
                         .inspectorColumnWidth(min: 320, ideal: 420, max: 700)
@@ -135,62 +156,11 @@ struct ContentView: View {
             SearchPaletteView()
                 .themedSheet()
         }
+        .background(FullScreenToolbarSwitch(isFullScreen: $isFullScreen, hidesToolbar: palette.fromScheme))
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    appState.isShowingAgentPanel.toggle()
-                } label: {
-                    Label("Claude", systemImage: "sparkles")
-                }
-                .help("Show or hide the Claude panel (⌘⇧A)")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    appState.isShowingSearch = true
-                } label: {
-                    Label("Search", systemImage: "magnifyingglass")
-                }
-                .help("Search hosts (⌘K)")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                switch appState.sidebarMode {
-                case .hosts:
-                    Menu {
-                        Button("New Host…") { appState.hostEditor = .create }
-                            .keyboardShortcut("n", modifiers: .command)
-                        Button("New Group…") { appState.newGroup = NewGroupRequest() }
-                            .keyboardShortcut("n", modifiers: [.command, .shift])
-                        Button("New Serial Console…") { appState.serialProfileEditor = .create }
-                    } label: {
-                        Label("New Host", systemImage: "plus")
-                    } primaryAction: {
-                        appState.hostEditor = .create
-                    }
-                    .help("New Host (⌘N); the arrow adds a group or a serial console")
-                case .snippets:
-                    Menu {
-                        Button("New Snippet…") { appState.snippetEditor = .create(folder: nil, command: nil) }
-                        Button("New Folder…") { appState.folderEditor = .some(nil) }
-                    } label: {
-                        Label("New Snippet", systemImage: "plus")
-                    }
-                    .help("New snippet or folder")
-                case .history:
-                    Button {
-                        appState.isConfirmingClearHistory = true
-                    } label: {
-                        Label("Clear History", systemImage: "trash")
-                    }
-                    .help("Clear the command history")
-                case .ports:
-                    Button {
-                        appState.portForwardEditor = .create(hostID: appState.selectedHostID)
-                    } label: {
-                        Label("New Rule", systemImage: "plus")
-                    }
-                    .help("New forwarding rule")
-                }
-            }
+            ToolbarItem(placement: .primaryAction) { claudeButton }
+            ToolbarItem(placement: .primaryAction) { searchButton }
+            ToolbarItem(placement: .primaryAction) { sidebarActionControl }
         }
         .task {
             restoreWorkspace()
@@ -222,6 +192,87 @@ struct ContentView: View {
             shouldConnect: { $0.usesIdentity })
     }
 
+    // MARK: Toolbar controls
+
+    // The same controls sit in the window toolbar and, in full screen with
+    // scheme-coloured chrome, in the detail column's header row.
+
+    private var claudeButton: some View {
+        Button {
+            appState.isShowingAgentPanel.toggle()
+        } label: {
+            Label("Claude", systemImage: "sparkles")
+        }
+        .help("Show or hide the Claude panel (⌘⇧A)")
+    }
+
+    private var searchButton: some View {
+        Button {
+            appState.isShowingSearch = true
+        } label: {
+            Label("Search", systemImage: "magnifyingglass")
+        }
+        .help("Search hosts (⌘K)")
+    }
+
+    /// The sidebar mode's own action: new host (with group and serial console
+    /// in the menu), new snippet, clear history, new forwarding rule.
+    @ViewBuilder private var sidebarActionControl: some View {
+        switch appState.sidebarMode {
+        case .hosts:
+            Menu {
+                Button("New Host…") { appState.hostEditor = .create }
+                    .keyboardShortcut("n", modifiers: .command)
+                Button("New Group…") { appState.newGroup = NewGroupRequest() }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                Button("New Serial Console…") { appState.serialProfileEditor = .create }
+            } label: {
+                Label("New Host", systemImage: "plus")
+            } primaryAction: {
+                appState.hostEditor = .create
+            }
+            .help("New Host (⌘N); the arrow adds a group or a serial console")
+        case .snippets:
+            Menu {
+                Button("New Snippet…") { appState.snippetEditor = .create(folder: nil, command: nil) }
+                Button("New Folder…") { appState.folderEditor = .some(nil) }
+            } label: {
+                Label("New Snippet", systemImage: "plus")
+            }
+            .help("New snippet or folder")
+        case .history:
+            Button {
+                appState.isConfirmingClearHistory = true
+            } label: {
+                Label("Clear History", systemImage: "trash")
+            }
+            .help("Clear the command history")
+        case .ports:
+            Button {
+                appState.portForwardEditor = .create(hostID: appState.selectedHostID)
+            } label: {
+                Label("New Rule", systemImage: "plus")
+            }
+            .help("New forwarding rule")
+        }
+    }
+
+    private var headerControls: some View {
+        HStack(spacing: 8) {
+            HeaderPill {
+                claudeButton.frame(width: 32, height: 26)
+                searchButton.frame(width: 32, height: 26)
+            }
+            HeaderPill {
+                sidebarActionControl.frame(height: 26).padding(.horizontal, 6)
+            }
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .font(.system(size: 14, weight: .medium))
+        .foregroundStyle(palette.text)
+    }
+
     /// `--window=identities|settings|export|ssh-config-export|agent|…` opens a window at launch (used by UI checks).
     /// Debug builds also take `--seed-demo`, `--sidebar=hosts|snippets|history`, `--qa-agent-demo`,
     /// `--connect=<host name>` and `--qa-type=<text>` (typed into the new session).
@@ -251,6 +302,9 @@ struct ContentView: View {
                             QADump.windows()
                             QADump.titleRegion()
                             #endif
+                            if CommandLine.arguments.contains("--qa-exit-fullscreen") {
+                                window.toggleFullScreen(nil)
+                            }
                             break
                         }
                         try? await Task.sleep(for: .milliseconds(500))

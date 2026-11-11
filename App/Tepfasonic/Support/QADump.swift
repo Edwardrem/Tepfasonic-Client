@@ -4,7 +4,7 @@ import AppKit
 /// Prints every window and its view tree; for diagnosing chrome drawn by AppKit.
 @MainActor
 enum QADump {
-    private static func log(_ line: String) {
+    static func log(_ line: String) {
         FileHandle.standardError.write(Data((line + "\n").utf8))
     }
 

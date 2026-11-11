@@ -1,8 +1,11 @@
 # Tepfasonic Client
 
-A free, open-source SSH client and terminal for macOS with a built-in Claude
-agent. No account, no sync server: your hosts live in a local database and
-move between Macs as an encrypted `.tepfa` file. The full plan is in
+A free, open-source DevOps and AIOps tool for macOS: an SSH client and
+terminal with a built-in Claude agent, made for managing large fleets of
+servers. Group hosts into projects, run and audit commands across them, and
+let Claude inspect, operate and report on them. No account, no sync server:
+your hosts live in a local database and move between Macs as an encrypted
+`.tepfa` file. The full plan is in
 [docs/PLAN.md](docs/PLAN.md).
 
 **Status:** all ten build steps are implemented (SSH transport, terminal, host
