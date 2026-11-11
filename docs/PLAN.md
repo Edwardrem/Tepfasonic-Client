@@ -18,6 +18,7 @@ _Nov 3, 2026 · Rufaro Mutepfa_
 | 10 | Serial and cloud-provider host imports (AWS, DigitalOcean, Azure) | **Done** (Nov 3, 2026) — USB serial consoles (`/dev/cu.*`) with saved line settings, line-ending conversion, local echo and a hex view, in the same tabs and splits; read-only EC2 / DigitalOcean / Azure listings with Keychain credentials that add instances through the reviewed import |
 | — | Jump hosts and proxies (section 6), group defaults | **Done** (Nov 3, 2026) — chained bastions over direct-tcpip channels, HTTP CONNECT and SOCKS5 proxies per host or group, group defaults for identity, jump host, proxy, theme and font |
 | — | Theming (section 16) | **Done** (Nov 3, 2026) — 13 bundled schemes, editor with live sample, import from iTerm2 / Windows Terminal / VS Code / Alacritty / Ghostty, JSON export, `tepfasonic://theme?url=` install links, bundled JetBrains Mono, cursor / contrast / opacity / blur, app appearance and accent, per-host and per-group overrides, background tint and watermark, corner badge, light / dark auto-switch by system or schedule, themes in `.tepfa` |
+| — | 0.2.0 polish | **Done** (Nov 11, 2026) — host editor could not add hosts (self-jump check fired on empty ids; the editor now shows why Save is off), app icon, the colour scheme drives the light / dark look of every window by default (`docs/releases/0.2.0.md`) |
 
 ## Export / import instead of sync
 

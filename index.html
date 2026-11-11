@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="icon.png">
   <title>Tepfasonic</title>
   <meta name="description" content="A free, open-source SSH client and terminal for macOS with a built-in Claude agent. No account, no server, no subscription.">
   <style>
@@ -14,6 +16,7 @@
     header { text-align: center; margin-bottom: 48px; }
     h1 { font-size: 44px; margin: 0 0 8px; letter-spacing: -0.02em; }
     .tagline { color: var(--muted); font-size: 20px; margin: 0 0 24px; }
+    .appicon { width: 128px; height: 128px; margin: 0 auto 12px; display: block; }
     .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
     .button { display: inline-block; padding: 12px 22px; border-radius: 10px; text-decoration: none; font-weight: 600; }
     .primary { background: var(--accent); color: #fff; }
@@ -34,6 +37,7 @@
 <body>
 <main>
   <header>
+    <img class="appicon" src="icon.png" width="128" height="128" alt="">
     <h1>Tepfasonic</h1>
     <p class="tagline">A free, open-source SSH client and terminal for macOS with a built-in Claude agent.<br>No account. No server. No subscription.</p>
     <div class="actions">
@@ -49,6 +53,16 @@
     <div class="card"><h3>Terminal you'd expect</h3><p>Tabs, nested splits, true colour, 100 000 lines of scrollback, auto-reconnect after sleep, restored on relaunch.</p></div>
     <div class="card"><h3>Move between Macs</h3><p>One encrypted <code>.tepfa</code> file carries hosts, keys, snippets and themes. Import from <code>~/.ssh/config</code>, Termius, PuTTY and Tabby.</p></div>
     <div class="card"><h3>Claude on your servers</h3><p>Bring your own API key, or connect Claude Desktop and Claude Code over MCP. Every command passes your per-host guardrails and lands in an audit log.</p></div>
+  </section>
+
+  <section>
+    <h2>New in 0.2.0</h2>
+    <ul>
+      <li>Adding a host works again: the editor's self-jump check fired on new hosts and kept the Add Host button off. It now says beside the buttons what still needs filling in.</li>
+      <li>An app icon for the Dock, Finder and the disk image.</li>
+      <li>The colour scheme sets the light or dark look of every window by default (sessions, Files, the Theme Editor, Identities &amp; Keys, Settings, sheets and menus); the other appearance choices apply everywhere too.</li>
+    </ul>
+    <p class="note">Full notes on the <a href="releases/">releases page</a>.</p>
   </section>
 
   <section>
