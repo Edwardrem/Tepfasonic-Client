@@ -61,14 +61,22 @@ struct HostEditorView: View {
         groups.first { $0.uuid == groupID }
     }
 
-    private var isValid: Bool {
-        !hostname.trimmingCharacters(in: .whitespaces).isEmpty
-            && !username.trimmingCharacters(in: .whitespaces).isEmpty
-            && portNumber != nil
-            && (authMethod == .password || identityID != nil || selectedGroup?.defaultIdentity != nil)
-            && proxy.isValid
-            && jumpHostID != editedHostID
+    /// What still stops the host from being saved; the first problem is shown beside the buttons.
+    private var validation: HostFormValidation {
+        HostFormValidation(.init(
+            hostname: hostname,
+            username: username,
+            port: port,
+            authMethod: authMethod,
+            hasIdentity: identityID != nil || selectedGroup?.defaultIdentity != nil,
+            proxyEnabled: proxy.enabled,
+            proxyHost: proxy.host,
+            proxyPort: proxy.port,
+            jumpHostID: jumpHostID,
+            editedHostID: editedHostID))
     }
+
+    private var isValid: Bool { validation.isValid }
 
     /// Hosts that may serve as a jump host: not this one, and not one that already jumps through it.
     private var jumpCandidates: [SSHHost] {
@@ -237,13 +245,21 @@ struct HostEditorView: View {
 
             Divider()
 
-            HStack {
+            HStack(spacing: 12) {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                if let problem = validation.problems.first {
+                    Label(problem, systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .accessibilityIdentifier("host-editor-problem")
+                }
                 Spacer()
                 Button(isEditing ? "Save" : "Add Host") { save() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!isValid)
+                    .help(validation.problems.first ?? (isEditing ? "Save the changes" : "Add the host to the list"))
             }
             .padding()
         }

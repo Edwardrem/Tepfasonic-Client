@@ -216,6 +216,7 @@ struct ContentView: View {
             case "ports": appState.sidebarMode = .ports
             case "cloud-import": appState.isShowingCloudImport = true
             case "theme-editor": appState.isShowingThemeEditor = true
+            case "new-host": appState.hostEditor = .create
             case "sftp":
                 if let host = hosts.first {
                     appState.sftpHostID = host.uuid
@@ -241,6 +242,18 @@ struct ContentView: View {
                 let document = try await ExportBuilder.document(from: modelContext, knownHosts: await KnownHostsStore.shared.allEntries(), options: .init(), appVersion: "qa")
                 let data = try TepfaFile.encode(document, passphrase: path.hasSuffix(".enc.tepfa") ? "qa" : nil)
                 try data.write(to: URL(fileURLWithPath: path))
+            }
+        }
+        // `--qa-new-host=user@host:port` opens the editor prefilled; `--qa-edit-host=<name>` edits a saved host.
+        for argument in CommandLine.arguments where argument.hasPrefix("--qa-new-host=") {
+            if let descriptor = HostDescriptor.quickConnect(String(argument.dropFirst("--qa-new-host=".count))) {
+                appState.hostEditor = .createFrom(descriptor)
+            }
+        }
+        for argument in CommandLine.arguments where argument.hasPrefix("--qa-edit-host=") {
+            let name = String(argument.dropFirst("--qa-edit-host=".count))
+            if let host = hosts.first(where: { $0.name == name }) {
+                appState.hostEditor = .edit(host)
             }
         }
         for argument in CommandLine.arguments where argument.hasPrefix("--sidebar=") {
