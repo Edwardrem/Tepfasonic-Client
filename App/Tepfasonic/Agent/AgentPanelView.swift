@@ -14,7 +14,6 @@ struct AgentPanelView: View {
     @Environment(\.palette) private var palette
     @State private var draft = ""
     @State private var dropTargeted = false
-    @State private var dictation = SpeechDictation()
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -233,6 +232,41 @@ struct AgentPanelView: View {
     }
 
     private var composer: some View {
+        ComposerView(draft: $draft, focused: $composerFocused)
+    }
+
+    /// Finder drops arrive as file URLs; everything else is ignored.
+    private func attach(_ providers: [NSItemProvider]) -> Bool {
+        let candidates = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+        guard !candidates.isEmpty else { return false }
+        for provider in candidates {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                Task { @MainActor in controller.attach(urls: [url]) }
+            }
+        }
+        return true
+    }
+}
+
+// MARK: - Composer
+
+/// The composer lives in its own view so that typing and dictation — which
+/// update the draft frequently — invalidate only this subtree, not the panel's
+/// transcript, which is backed by an `NSScrollView` (a platform view). On
+/// macOS 26/27 a view/responder change under the cursor can trip a
+/// use-after-free in SwiftUI's own hover hit-testing (`NSViewResponder`
+/// `.platformCurrentEvent`), a system bug that crashes many apps; keeping the
+/// churn out of the transcript, and not animating the microphone, makes that
+/// far less likely to fire while recording.
+private struct ComposerView: View {
+    @Environment(AgentPanelController.self) private var controller
+    @Environment(\.palette) private var palette
+    @Binding var draft: String
+    var focused: FocusState<Bool>.Binding
+    @State private var dictation = SpeechDictation()
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !controller.pendingAttachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -259,22 +293,24 @@ struct AgentPanelView: View {
                 TextField(placeholder, text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...8)
-                    .focused($composerFocused)
+                    .focused(focused)
                     .onSubmit(send)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
                     .background(palette.raised, in: Design.shape(Design.radiusBubble))
-                    .overlay(Design.shape(Design.radiusBubble).strokeBorder(composerFocused ? (palette.accent ?? .accentColor).opacity(0.6) : palette.separator, lineWidth: composerFocused ? 1 : 0.5))
+                    .overlay(Design.shape(Design.radiusBubble).strokeBorder(focused.wrappedValue ? (palette.accent ?? .accentColor).opacity(0.6) : palette.separator, lineWidth: focused.wrappedValue ? 1 : 0.5))
                 if dictation.isAvailable {
                     Button {
                         toggleDictation()
                     } label: {
+                        // A constant point size and fixed frame: the symbol swap
+                        // must not resize or animate, to avoid churning the
+                        // responder tree while the cursor is over the button.
                         Image(systemName: dictation.isListening ? "stop.circle.fill" : "mic.fill")
-                            .font(.system(size: dictation.isListening ? 20 : 15, weight: .medium))
+                            .font(.system(size: 15, weight: .medium))
                             .frame(width: 30, height: 30)
                             .background(dictation.isListening ? Color.red.opacity(0.16) : palette.raised, in: Circle())
                             .foregroundStyle(dictation.isListening ? Color.red : .secondary)
-                            .symbolEffect(.pulse, isActive: dictation.isListening)
                     }
                     .buttonStyle(.plain)
                     .help(dictation.isListening ? "Stop dictation" : "Dictate your message — speech stays on this Mac")
@@ -305,7 +341,7 @@ struct AgentPanelView: View {
     private func toggleDictation() {
         guard !dictation.isListening else {
             dictation.stop()
-            composerFocused = true
+            focused.wrappedValue = true
             return
         }
         let base = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -328,19 +364,6 @@ struct AgentPanelView: View {
         let text = draft
         draft = ""
         controller.send(text)
-    }
-
-    /// Finder drops arrive as file URLs; everything else is ignored.
-    private func attach(_ providers: [NSItemProvider]) -> Bool {
-        let candidates = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
-        guard !candidates.isEmpty else { return false }
-        for provider in candidates {
-            provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
-                guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                Task { @MainActor in controller.attach(urls: [url]) }
-            }
-        }
-        return true
     }
 }
 

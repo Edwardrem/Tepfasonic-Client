@@ -19,6 +19,11 @@ struct TepfasonicApp: App {
     private let container: ModelContainer
 
     init() {
+        // macOS 26/27 workaround, belt-and-suspenders for launches that bypass
+        // LaunchServices (the Info.plist LSEnvironment covers Finder/`open`):
+        // force the pre-Swift-6 thread-based executor check so SwiftUI's hover
+        // hit-testing cannot crash in swift_task_isCurrentExecutorWithFlags.
+        setenv("SWIFT_IS_CURRENT_EXECUTOR_LEGACY_MODE_OVERRIDE", "legacy", 0)
         do {
             let schema = Schema(TepfaSchema.models)
             let configuration = ModelConfiguration("Tepfasonic", schema: schema, url: AppPaths.databaseURL)
