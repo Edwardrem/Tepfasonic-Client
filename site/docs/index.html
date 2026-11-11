@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" href="../favicon.png">
+  <link rel="apple-touch-icon" href="../icon.png">
   <title>Tepfasonic Docs</title>
   <style>
     :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --card: #f5f5f7; --border: #e5e5ea; --accent: #2a99e6; }
@@ -55,6 +57,8 @@
   <p>Edit a host and choose a jump host under <em>Route</em>; the connection is tunnelled through the bastion's SSH connection, and bastions chain. Proxies (HTTP CONNECT or SOCKS5) sit on a host or a group. The Port Forwarding sidebar (<kbd>⇧⌘P</kbd>) holds local, remote and SOCKS5 rules that start with a click or on connect and show live byte counts.</p>
   <h2>Files</h2>
   <p>Press <kbd>⌥⌘O</kbd> in a session for the dual-pane SFTP browser. Either pane can show this Mac or any host; drag between them, or from the Finder. Double-click a remote file to open it in its default app; saving uploads it again.</p>
+  <h2>Themes and appearance</h2>
+  <p>Settings → Appearance picks the colour scheme (one scheme, a light and dark pair that follows macOS, or a pair on a schedule), the font and the cursor. By default every window goes light or dark with the scheme in use; choose <em>Follow the system</em>, <em>Always light</em> or <em>Always dark</em> there to decouple them. View → Theme Editor… edits, imports and exports schemes, and hosts and groups can override the scheme and font.</p>
   <h2>Serial consoles and cloud imports</h2>
   <p>File → New Serial Console… saves a <code>/dev/cu.*</code> device with its line settings; it opens in a normal tab with an optional hex view. File → Import From → Cloud Provider lists EC2, DigitalOcean and Azure instances once read-only credentials are saved in Settings → Cloud.</p>
   <h2>Where things live</h2>
