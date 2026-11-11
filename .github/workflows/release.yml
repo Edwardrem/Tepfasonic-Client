@@ -21,6 +21,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the notes can list the commits since the previous tag.
+          fetch-depth: 0
 
       - name: Select Xcode
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer" && xcodebuild -version
@@ -117,13 +120,17 @@ jobs:
         run: cd dist && shasum -a 256 *.dmg *.zip > SHA256SUMS && cat SHA256SUMS
 
       - name: Release notes
+        # docs/releases/<version>.md is the hand-written part when it exists;
+        # the commits since the previous tag are listed after it either way.
         run: |
           {
             echo "## Tepfasonic ${{ steps.version.outputs.marketing }}"
             echo
             if [ "$signed" = "true" ]; then echo "Signed with Developer ID and notarized."; else echo "**Unsigned build.** Right-click → Open the first time, or run \`xattr -dr com.apple.quarantine /Applications/Tepfasonic.app\`."; fi
             echo
-            echo "### Changes"
+            NOTES="docs/releases/${{ steps.version.outputs.marketing }}.md"
+            if [ -f "$NOTES" ]; then cat "$NOTES"; echo; fi
+            echo "### Commits"
             git log --pretty='- %s' "$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD" | grep -v -i 'merge' | head -50
           } > dist/RELEASE_NOTES.md
 

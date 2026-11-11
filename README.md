@@ -98,9 +98,11 @@ see "Known limits" for what the libraries underneath cannot do.
   as the default font; any installed monospace family, size, line height,
   ligatures on or off, bold and italic faces. Block, bar or underline cursor
   with or without blink, anti-aliasing, a minimum contrast ratio so dark text
-  on dark backgrounds stays readable, background opacity with blur. The app
-  follows the system appearance or stays light or dark, takes the system
-  accent or a custom one, and has a compact or comfortable sidebar. A light
+  on dark backgrounds stays readable, background opacity with blur. Every
+  window (sessions, Files, the Theme Editor, Identities & Keys, Settings,
+  sheets and menus) goes light or dark with the scheme in use by default, or
+  follows the system appearance, or stays light or dark; the accent is the
+  system's or a custom one, and the sidebar is compact or comfortable. A light
   and dark scheme pair swaps with the macOS appearance or on a schedule. Hosts
   and groups override the scheme and font; a badge in a terminal corner shows
   the host, user and session uptime. Themes travel in `.tepfa` files.
@@ -217,7 +219,8 @@ For manual QA against scratch data, launch the Debug build with
 `TEPFA_DATA_DIR=/some/dir TEPFA_KEYCHAIN_SERVICE=com.tepfasonic.qa` and the
 arguments `--seed-demo --window=identities`. Debug builds also take
 `--sidebar=hosts|snippets|history|ports`,
-`--window=identities|settings|export|ssh-config-export|agent|ports|cloud-import|theme-editor|sftp`,
+`--window=identities|settings|export|ssh-config-export|agent|ports|cloud-import|theme-editor|sftp|new-host`,
+`--qa-new-host=<user@host:port>` (the editor, prefilled), `--qa-edit-host=<name>`,
 `--connect=<host name>`, `--qa-type=<text>`, `--qa-approval`,
 `--import=<path>` (add `--qa-import-apply`) and `--qa-export=<path>`. The demo
 data includes a bastion, a host that jumps through it, a production host with

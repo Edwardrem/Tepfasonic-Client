@@ -2,7 +2,9 @@
 
 Releases are cut by pushing a tag. CI does the rest (see `.github/workflows/release.yml`).
 
-**State on 2026-11-03:** `v0.1.0` is published (ad-hoc signed DMG, ZIP and `SHA256SUMS`), GitHub Pages is enabled from the `gh-pages` branch and serves the landing, download and releases pages. Still to do by the repository owner, because each needs a secret or a new repository: the Sparkle key pair (enables the update feed), the Developer ID certificate and notarization credentials (enables in-place updates), and the Homebrew tap repository with its token (enables `brew install --cask tepfasonic`).
+**State on 2026-11-11:** `v0.2.0` is the current release (ad-hoc signed DMG, ZIP and `SHA256SUMS`; `v0.1.0` came out on 2026-11-03). GitHub Pages is enabled from the `gh-pages` branch and serves the landing, download and releases pages. Still to do by the repository owner, because each needs a secret or a new repository: the Sparkle key pair (enables the update feed), the Developer ID certificate and notarization credentials (enables in-place updates), and the Homebrew tap repository with its token (enables `brew install --cask tepfasonic`).
+
+Each release's hand-written notes live in `docs/releases/<version>.md`; the workflow prints them above the list of commits since the previous tag. Write that file before pushing the tag.
 
 ```sh
 git tag v0.2.0 && git push origin v0.2.0        # stable → appcast.xml
