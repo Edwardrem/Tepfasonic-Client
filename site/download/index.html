@@ -32,7 +32,7 @@
   <h2>Install</h2>
   <ol>
     <li>Open the <code>.dmg</code> and drag <strong>Tepfasonic</strong> to <strong>Applications</strong>.</li>
-    <li>Builds are not yet signed with an Apple Developer ID, so the first launch needs one extra step: right-click the app and choose <strong>Open</strong>, then confirm. Or run
+    <li>Builds are not yet signed with an Apple Developer ID, so macOS blocks the first launch. Open the app once and dismiss the warning, then go to <strong>System Settings › Privacy &amp; Security</strong>, scroll to Security and click <strong>Open Anyway</strong> (right-click → Open no longer works on macOS 15 and later). Or run
       <pre><code>xattr -dr com.apple.quarantine /Applications/Tepfasonic.app</code></pre>
       Once Developer ID signing is in place this step goes away and updates install in place.</li>
     <li>Launch it, press <kbd>⌘N</kbd> to add a host or type <code>user@host</code> in the quick-connect field.</li>

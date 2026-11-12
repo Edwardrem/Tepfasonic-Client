@@ -209,14 +209,17 @@ open .build/DerivedData/Build/Products/Debug/Tepfasonic.app
 ```
 
 Builds are ad-hoc signed until a Developer ID certificate is available, so
-Gatekeeper asks for a right-click → Open the first time (or
-`xattr -dr com.apple.quarantine /Applications/Tepfasonic.app`).
+Gatekeeper blocks a downloaded copy the first time. Open it once, dismiss the
+warning, then choose **Open Anyway** under System Settings › Privacy & Security
+(or run `xattr -dr com.apple.quarantine /Applications/Tepfasonic.app`). The old
+right-click → Open shortcut no longer works on macOS 15 and later.
 
 ## Installing a release
 
 Download the `.dmg` from the [download page](https://edwardrem.github.io/Tepfasonic-Client/download/)
 or from [GitHub Releases](https://github.com/Edwardrem/Tepfasonic-Client/releases),
-drag the app to Applications and open it once with right-click → Open. Every
+drag the app to Applications, open it once, then allow it with **Open Anyway**
+under System Settings › Privacy & Security (see above). Every
 release also ships a `.zip` for the in-app updater and a `SHA256SUMS` file.
 Releases are cut by pushing a `vX.Y.Z` tag; see [docs/RELEASING.md](docs/RELEASING.md).
 

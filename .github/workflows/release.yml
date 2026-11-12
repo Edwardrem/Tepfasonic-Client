@@ -142,7 +142,7 @@ jobs:
           {
             echo "## Tepfasonic ${{ steps.version.outputs.marketing }}"
             echo
-            if [ "$signed" = "true" ]; then echo "Signed with Developer ID and notarized."; else echo "**Unsigned build.** Right-click → Open the first time, or run \`xattr -dr com.apple.quarantine /Applications/Tepfasonic.app\`."; fi
+            if [ "$signed" = "true" ]; then echo "Signed with Developer ID and notarized."; else echo "**Unsigned build.** macOS blocks the first launch: open the app once, then click Open Anyway under System Settings › Privacy & Security (right-click → Open no longer works on macOS 15 and later), or run \`xattr -dr com.apple.quarantine /Applications/Tepfasonic.app\`."; fi
             echo
             NOTES="docs/releases/${{ steps.version.outputs.marketing }}.md"
             if [ -f "$NOTES" ]; then cat "$NOTES"; echo; fi
