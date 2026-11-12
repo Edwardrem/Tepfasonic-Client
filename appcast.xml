@@ -6,6 +6,16 @@
     <description>Tepfasonic releases</description>
     <language>en</language>
     <item>
+      <title>Tepfasonic 0.3.7</title>
+      <link>https://github.com/Edwardrem/Tepfasonic-Client/releases/tag/v0.3.7</link>
+      <sparkle:version>11</sparkle:version>
+      <sparkle:shortVersionString>0.3.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/Edwardrem/Tepfasonic-Client/releases/tag/v0.3.7</sparkle:releaseNotesLink>
+      <pubDate>Thu, 12 Nov 2026 09:57:00 GMT</pubDate>
+      <enclosure url="https://github.com/Edwardrem/Tepfasonic-Client/releases/download/v0.3.7/Tepfasonic-0.3.7.dmg" length="14991751" type="application/octet-stream" sparkle:version="11" sparkle:shortVersionString="0.3.7"/>
+    </item>
+    <item>
       <title>Tepfasonic 0.3.5</title>
       <link>https://github.com/Edwardrem/Tepfasonic-Client/releases/tag/v0.3.5</link>
       <sparkle:version>9</sparkle:version>
