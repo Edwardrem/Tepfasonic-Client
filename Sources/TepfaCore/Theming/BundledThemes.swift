@@ -3,6 +3,49 @@ import Foundation
 public extension TerminalTheme {
     /// The schemes that ship with the app. Ids are stable (`builtin:<slug>`).
     static let bundled: [TerminalTheme] = [
+        // The Tepfasonic family: one neutral canvas (charcoal, or white for the
+        // light ones), the iOS system colours as the ANSI palette, and a single
+        // named accent that the app's chrome takes on. Lagoon is the default.
+        TerminalTheme(
+            id: "builtin:lagoon", name: "Lagoon", foreground: "#FFFFFF", background: "#1E1E1E", cursor: "#14F0F0", cursorText: "#1E1E1E", selection: "#1B5D5D",
+            ansi: ["#1C1C1E", "#FF453A", "#30D158", "#FFD60A", "#0A84FF", "#BF5AF2", "#64D2FF", "#D1D1D6", "#8E8E93", "#FF6961", "#4CE07A", "#FFE04D", "#409CFF", "#DA8FFF", "#70D7FF", "#FFFFFF"],
+            isDark: true, accent: "#14F0F0"),
+        TerminalTheme(
+            id: "builtin:meadow", name: "Meadow", foreground: "#FFFFFF", background: "#1E1E1E", cursor: "#30D158", cursorText: "#1E1E1E", selection: "#23542F",
+            ansi: ["#1C1C1E", "#FF453A", "#30D158", "#FFD60A", "#0A84FF", "#BF5AF2", "#64D2FF", "#D1D1D6", "#8E8E93", "#FF6961", "#4CE07A", "#FFE04D", "#409CFF", "#DA8FFF", "#70D7FF", "#FFFFFF"],
+            isDark: true, accent: "#30D158"),
+        TerminalTheme(
+            id: "builtin:ember", name: "Ember", foreground: "#FFFFFF", background: "#1E1E1E", cursor: "#FF9F0A", cursorText: "#1E1E1E", selection: "#624518",
+            ansi: ["#1C1C1E", "#FF453A", "#30D158", "#FFD60A", "#0A84FF", "#BF5AF2", "#64D2FF", "#D1D1D6", "#8E8E93", "#FF6961", "#4CE07A", "#FFE04D", "#409CFF", "#DA8FFF", "#70D7FF", "#FFFFFF"],
+            isDark: true, accent: "#FF9F0A"),
+        TerminalTheme(
+            id: "builtin:sunbeam", name: "Sunbeam", foreground: "#FFFFFF", background: "#1E1E1E", cursor: "#FFD60A", cursorText: "#1E1E1E", selection: "#625518",
+            ansi: ["#1C1C1E", "#FF453A", "#30D158", "#FFD60A", "#0A84FF", "#BF5AF2", "#64D2FF", "#D1D1D6", "#8E8E93", "#FF6961", "#4CE07A", "#FFE04D", "#409CFF", "#DA8FFF", "#70D7FF", "#FFFFFF"],
+            isDark: true, accent: "#FFD60A"),
+        TerminalTheme(
+            id: "builtin:coral", name: "Coral", foreground: "#FFFFFF", background: "#1E1E1E", cursor: "#FF6482", cursorText: "#1E1E1E", selection: "#62333C",
+            ansi: ["#1C1C1E", "#FF453A", "#30D158", "#FFD60A", "#0A84FF", "#BF5AF2", "#64D2FF", "#D1D1D6", "#8E8E93", "#FF6961", "#4CE07A", "#FFE04D", "#409CFF", "#DA8FFF", "#70D7FF", "#FFFFFF"],
+            isDark: true, accent: "#FF6482"),
+        TerminalTheme(
+            id: "builtin:orchid", name: "Orchid", foreground: "#FFFFFF", background: "#1E1E1E", cursor: "#BF5AF2", cursorText: "#1E1E1E", selection: "#4E305E",
+            ansi: ["#1C1C1E", "#FF453A", "#30D158", "#FFD60A", "#0A84FF", "#BF5AF2", "#64D2FF", "#D1D1D6", "#8E8E93", "#FF6961", "#4CE07A", "#FFE04D", "#409CFF", "#DA8FFF", "#70D7FF", "#FFFFFF"],
+            isDark: true, accent: "#BF5AF2"),
+        TerminalTheme(
+            id: "builtin:cobalt", name: "Cobalt", foreground: "#FFFFFF", background: "#1E1E1E", cursor: "#409CFF", cursorText: "#1E1E1E", selection: "#284462",
+            ansi: ["#1C1C1E", "#FF453A", "#30D158", "#FFD60A", "#0A84FF", "#BF5AF2", "#64D2FF", "#D1D1D6", "#8E8E93", "#FF6961", "#4CE07A", "#FFE04D", "#409CFF", "#DA8FFF", "#70D7FF", "#FFFFFF"],
+            isDark: true, accent: "#409CFF"),
+        TerminalTheme(
+            id: "builtin:shoreline", name: "Shoreline", foreground: "#1D1D1F", background: "#FFFFFF", cursor: "#008A8F", cursorText: "#FFFFFF", selection: "#BFE2E3",
+            ansi: ["#1C1C1E", "#D70015", "#1F8A3B", "#A05A00", "#0040DD", "#8944AB", "#0071A4", "#8E8E93", "#636366", "#FF3B30", "#248A3D", "#B25000", "#007AFF", "#AF52DE", "#0A84A8", "#3A3A3C"],
+            isDark: false, accent: "#008A8F"),
+        TerminalTheme(
+            id: "builtin:orchard", name: "Orchard", foreground: "#1D1D1F", background: "#FFFFFF", cursor: "#1F8A3B", cursorText: "#FFFFFF", selection: "#C7E2CE",
+            ansi: ["#1C1C1E", "#D70015", "#1F8A3B", "#A05A00", "#0040DD", "#8944AB", "#0071A4", "#8E8E93", "#636366", "#FF3B30", "#248A3D", "#B25000", "#007AFF", "#AF52DE", "#0A84A8", "#3A3A3C"],
+            isDark: false, accent: "#1F8A3B"),
+        TerminalTheme(
+            id: "builtin:harbor", name: "Harbor", foreground: "#1D1D1F", background: "#FFFFFF", cursor: "#0A6CFF", cursorText: "#FFFFFF", selection: "#C2DAFF",
+            ansi: ["#1C1C1E", "#D70015", "#1F8A3B", "#A05A00", "#0040DD", "#8944AB", "#0071A4", "#8E8E93", "#636366", "#FF3B30", "#248A3D", "#B25000", "#007AFF", "#AF52DE", "#0A84A8", "#3A3A3C"],
+            isDark: false, accent: "#0A6CFF"),
         TerminalTheme(
             id: "builtin:apple-terminal", name: "Apple Terminal", foreground: "#FFFFFF", background: "#1E1E1E", cursor: "#FFFFFF", selection: "#4D4D4D",
             ansi: ["#000000", "#C23621", "#25BC24", "#ADAD27", "#492EE1", "#D338D3", "#33BBC8", "#CBCCCD", "#818383", "#FC391F", "#31E722", "#EAEC23", "#5833FF", "#F935F8", "#14F0F0", "#E9EBEB"],
@@ -57,8 +100,8 @@ public extension TerminalTheme {
             isDark: true),
     ]
 
-    static let defaultDark = bundled[0]
-    static let defaultLight = bundled[1]
+    static let defaultDark = bundled.first { $0.id == "builtin:lagoon" }!
+    static let defaultLight = bundled.first { $0.id == "builtin:shoreline" }!
 
     static func bundled(id: String) -> TerminalTheme? {
         bundled.first { $0.id == id }

@@ -125,4 +125,37 @@ public enum AgentTranscript {
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode([AgentMessage].self, from: data)
     }
+
+    /// The conversation as plain text for the clipboard: each visible turn
+    /// under "You" or "Claude", attachments by name and tool calls as one line.
+    /// Thinking and tool results are left out.
+    public static func plainText(_ messages: [AgentMessage]) -> String {
+        var turns: [String] = []
+        for message in messages {
+            var lines: [String] = []
+            for block in message.blocks {
+                switch block {
+                case .text(let text):
+                    lines.append(text)
+                case .attachment(let file):
+                    lines.append("[Attached: \(file.fileName)]")
+                case .toolUse(_, let name, let input):
+                    let detail = input["command"]?.stringValue ?? input["path"]?.stringValue ?? input["remote_path"]?.stringValue ?? input["file_name"]?.stringValue
+                    let host = input["host"]?.stringValue.map { " on \($0)" } ?? ""
+                    lines.append("[\(name)\(host)\(detail.map { ": \($0)" } ?? "")]")
+                case .thinking, .redactedThinking, .toolResult:
+                    break
+                }
+            }
+            guard !lines.isEmpty else { continue }
+            let body = lines.joined(separator: "\n")
+            // Consecutive assistant messages (a reply split by tool calls) read as one turn.
+            if message.role == .assistant, let last = turns.last, last.hasPrefix("Claude:\n") {
+                turns[turns.count - 1] = last + "\n" + body
+            } else {
+                turns.append((message.role == .user ? "You:\n" : "Claude:\n") + body)
+            }
+        }
+        return turns.joined(separator: "\n\n")
+    }
 }

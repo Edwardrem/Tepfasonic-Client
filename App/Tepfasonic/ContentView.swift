@@ -334,6 +334,13 @@ struct ContentView: View {
             // A finished conversation with an attachment and a generated report, for screenshots.
             appState.isShowingAgentPanel = true
             agent.seedDemoConversation()
+            // `--qa-agent-edit`: the first message picked for editing, to show the banner.
+            if CommandLine.arguments.contains("--qa-agent-edit"), let first = agent.session?.messages.first {
+                Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    agent.beginEditing(first)
+                }
+            }
         }
         if CommandLine.arguments.contains("--qa-approval"), let host = hosts.first {
             // Shows the approval sheet with a sample destructive command (UI checks).

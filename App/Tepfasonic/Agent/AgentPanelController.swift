@@ -34,6 +34,9 @@ final class AgentPanelController {
     private(set) var pendingAttachments: [AgentAttachment] = []
     /// Why the last file could not be attached.
     private(set) var attachmentError: String?
+    /// The earlier user message being rewritten in the composer. Sending
+    /// replaces it and everything after it.
+    private(set) var editing: AgentMessage?
     private var providerConfiguration: LLMProviderConfiguration?
 
     /// Copies of attached files live here, one folder per attachment.
@@ -99,6 +102,7 @@ final class AgentPanelController {
 
     func open(_ stored: AgentConversation) {
         stop()
+        cancelEditing()
         conversation = stored
         let messages = (try? AgentTranscript.decode(stored.transcript)) ?? []
         if let session {
@@ -111,6 +115,7 @@ final class AgentPanelController {
 
     func newConversation() {
         stop()
+        cancelEditing()
         conversation = nil
         if let session {
             session.replace(messages: [])
@@ -144,7 +149,11 @@ final class AgentPanelController {
 
     func removeAttachment(_ file: AgentAttachment) {
         pendingAttachments.removeAll { $0.id == file.id }
-        AttachmentImporter.discard(file)
+        // A file that came with the message being edited still belongs to that
+        // message until the edit is sent, so its copy stays on disk.
+        if editing?.attachments.contains(where: { $0.id == file.id }) != true {
+            AttachmentImporter.discard(file)
+        }
         attachmentError = nil
     }
 
@@ -164,6 +173,44 @@ final class AgentPanelController {
         }
     }
 
+    // MARK: Copying and editing
+
+    /// The whole conversation as plain text on the clipboard.
+    func copyConversation() {
+        guard let session else { return }
+        Self.copy(AgentTranscript.plainText(session.messages))
+    }
+
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    /// Whether this message can be rewritten: a user turn the person typed
+    /// (not a tool result), while no reply is running.
+    func canEdit(_ message: AgentMessage) -> Bool {
+        message.role == .user && (!message.text.isEmpty || !message.attachments.isEmpty) && session?.isRunning != true
+    }
+
+    /// Starts rewriting an earlier message: its files go back in the pending
+    /// list and the caller puts its text in the composer. Nothing in the
+    /// transcript changes until the edit is sent.
+    func beginEditing(_ message: AgentMessage) {
+        guard canEdit(message) else { return }
+        cancelEditing()
+        editing = message
+        let present = Set(pendingAttachments.map(\.id))
+        pendingAttachments = message.attachments.filter { !present.contains($0.id) && !$0.isMissing } + pendingAttachments
+    }
+
+    /// Leaves the earlier message as it was.
+    func cancelEditing() {
+        guard let message = editing else { return }
+        editing = nil
+        let original = Set(message.attachments.map(\.id))
+        pendingAttachments.removeAll { original.contains($0.id) }
+    }
+
     // MARK: Sending
 
     var canSend: Bool {
@@ -177,6 +224,7 @@ final class AgentPanelController {
         self.session = session
         guard session.canSend else { return }
         let files = pendingAttachments
+        let edited = editing
         pendingAttachments = []
         attachmentError = nil
         setupError = nil
@@ -187,6 +235,14 @@ final class AgentPanelController {
                     providerConfiguration = settings.configuration
                 }
                 session.systemPrompt = systemPrompt()
+                if let edited, editing?.id == edited.id {
+                    // The rewritten message takes the place of the original and of
+                    // every reply that followed it. Files taken off the edit go with it.
+                    editing = nil
+                    session.rewind(to: edited.id)
+                    let kept = Set(files.map(\.id))
+                    for file in edited.attachments where !kept.contains(file.id) { AttachmentImporter.discard(file) }
+                }
                 session.send(trimmed, attachments: files)
             } catch {
                 // Keep the files so the user can try again once the key is set.

@@ -11,6 +11,34 @@ enum Design {
     static func shape(_ radius: CGFloat) -> RoundedRectangle {
         RoundedRectangle(cornerRadius: radius, style: .continuous)
     }
+
+    /// Body text in the Claude panel: one point above the system body size, so
+    /// a conversation reads comfortably beside a terminal.
+    static let chatTextSize: CGFloat = 14
+
+    /// Row titles in the sidebar lists, matching the Claude panel's text.
+    static let sidebarTextSize: CGFloat = 14
+
+    /// Icon colours for the sidebar and the Claude panel. Each colour means one thing everywhere
+    /// it appears, in the system hues iOS uses, so colour carries information
+    /// rather than decoration.
+    enum Tint {
+        static let attach = Color.blue
+        static let voice = Color.green
+        static let copy = Color.blue
+        static let edit = Color.orange
+        static let command = Color.indigo
+        static let read = Color.teal
+        static let document = Color.red
+        static let image = Color.purple
+        static let storage = Color.orange
+        static let thinking = Color.purple
+        static let fleet = Color.blue
+        static let host = Color.green
+        static let group = Color.orange
+        static let conversation = Color.pink
+        static let quick = Color.yellow
+    }
 }
 
 /// A rounded, gradient-filled square with a white symbol: the iOS app-icon

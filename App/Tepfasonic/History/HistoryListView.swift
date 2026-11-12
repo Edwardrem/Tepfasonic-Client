@@ -118,11 +118,12 @@ struct HistoryRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             statusBadge
-                .frame(width: 16)
+                .font(.body)
+                .frame(width: 20)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.command)
-                    .font(.callout.monospaced())
+                    .font(.body.monospaced())
                     .lineLimit(2)
                 HStack(spacing: 4) {
                     Text(entry.hostName)
@@ -133,12 +134,12 @@ struct HistoryRow: View {
                         Text(directory).lineLimit(1).truncationMode(.head)
                     }
                 }
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -148,14 +149,14 @@ struct HistoryRow: View {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).help("Exit status 0")
             } else {
                 Text(String(status))
-                    .font(.caption2.monospacedDigit().bold())
+                    .font(.caption.monospacedDigit().bold())
                     .foregroundStyle(.white)
                     .padding(.horizontal, 3)
                     .background(Color.red, in: RoundedRectangle(cornerRadius: 3))
                     .help("Exit status \(status)")
             }
         } else if entry.finishedAt == nil, entry.source == .shellIntegration {
-            Image(systemName: "circle.dotted").foregroundStyle(.secondary).help("Still running, or the session ended")
+            Image(systemName: "circle.dotted").foregroundStyle(.orange).help("Still running, or the session ended")
         } else {
             Image(systemName: "minus.circle").foregroundStyle(.tertiary).help("Exit status unknown: the host's shell has no integration")
         }

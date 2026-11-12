@@ -22,8 +22,12 @@ public struct TerminalTheme: Codable, Sendable, Hashable, Identifiable {
     public var ansi: [String]
     /// Hint for auto-switching between a light and a dark scheme.
     public var isDark: Bool
+    /// The app's accent under this scheme (buttons, selection, message bubbles);
+    /// nil picks one from the ANSI colours.
+    public var accent: String?
 
-    public init(id: String, name: String, foreground: String, background: String, bold: String? = nil, cursor: String, cursorText: String? = nil, selection: String, selectionText: String? = nil, ansi: [String], isDark: Bool) {
+    public init(id: String, name: String, foreground: String, background: String, bold: String? = nil, cursor: String, cursorText: String? = nil, selection: String, selectionText: String? = nil, ansi: [String], isDark: Bool, accent: String? = nil) {
+        self.accent = accent
         self.id = id
         self.name = name
         self.foreground = foreground
@@ -38,7 +42,7 @@ public struct TerminalTheme: Codable, Sendable, Hashable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case format, id, name, foreground, background, bold, cursor, cursorText, selection, selectionText, ansi, isDark
+        case format, id, name, foreground, background, bold, cursor, cursorText, selection, selectionText, ansi, isDark, accent
     }
 
     public init(from decoder: any Decoder) throws {
@@ -58,7 +62,8 @@ public struct TerminalTheme: Codable, Sendable, Hashable, Identifiable {
         }
         ansi = colors
         isDark = try container.decodeIfPresent(Bool.self, forKey: .isDark) ?? (Self.luminance(background) < 0.5)
-        for value in [foreground, background, cursor, selection] + ansi + [bold, cursorText, selectionText].compactMap({ $0 }) where Self.rgb(value) == nil {
+        accent = try container.decodeIfPresent(String.self, forKey: .accent)
+        for value in [foreground, background, cursor, selection] + ansi + [bold, cursorText, selectionText, accent].compactMap({ $0 }) where Self.rgb(value) == nil {
             throw DecodingError.dataCorruptedError(forKey: .ansi, in: container, debugDescription: "\(value) is not a #RRGGBB colour")
         }
     }
@@ -77,6 +82,7 @@ public struct TerminalTheme: Codable, Sendable, Hashable, Identifiable {
         try container.encodeIfPresent(selectionText, forKey: .selectionText)
         try container.encode(ansi, forKey: .ansi)
         try container.encode(isDark, forKey: .isDark)
+        try container.encodeIfPresent(accent, forKey: .accent)
     }
 
     // MARK: JSON

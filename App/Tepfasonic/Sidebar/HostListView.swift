@@ -36,7 +36,7 @@ struct HostListView: View {
                     hostRows(members, in: group)
                     if members.isEmpty {
                         Text("No hosts yet. Drag hosts here or right-click to add one.")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                             .selectionDisabled()
@@ -127,16 +127,17 @@ struct HostListView: View {
         let isTarget = dropTarget == (group?.uuid ?? Self.ungroupedDropID)
         return HStack(spacing: 6) {
             if let color {
-                RoundedRectangle(cornerRadius: 2.5, style: .continuous).fill(color).frame(width: 9, height: 9)
+                RoundedRectangle(cornerRadius: 3.5, style: .continuous).fill(color.gradient).frame(width: 12, height: 12)
             }
             Text(name)
+                .font(.callout.weight(.semibold))
             if group != nil, count > 0 {
                 Text("\(count)")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 5)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(color ?? .secondary)
+                    .padding(.horizontal, 6)
                     .padding(.vertical, 1)
-                    .background(.quaternary, in: Capsule())
+                    .background((color ?? .secondary).opacity(0.18), in: Capsule())
             }
         }
         .padding(.horizontal, 4)
@@ -299,28 +300,28 @@ struct SerialProfileRow: View {
 
     var body: some View {
         let compact = themes.appearance.compactSidebar
-        HStack(spacing: compact ? 8 : 10) {
-            IconTile(systemImage: "cable.connector", color: HostColor.color(profile.colorLabel) ?? HostRow.neutralTile, size: compact ? 20 : 28)
+        HStack(spacing: compact ? 8 : 12) {
+            IconTile(systemImage: "cable.connector", color: HostColor.color(profile.colorLabel) ?? HostRow.neutralTile, size: compact ? 22 : 34)
                 .overlay(alignment: .bottomTrailing) {
                     if !sessions.isEmpty {
-                        StatusDot(color: sessions.contains(where: \.isConnected) ? .green : (sessions.contains(where: \.isBusy) ? .orange : .secondary), size: compact ? 6 : 8)
+                        StatusDot(color: sessions.contains(where: \.isConnected) ? .green : (sessions.contains(where: \.isBusy) ? .orange : .secondary), size: compact ? 6 : 9)
                             .offset(x: 3, y: 3)
                     }
                 }
             VStack(alignment: .leading, spacing: 1) {
                 Text(profile.name)
-                    .font(compact ? .callout : .body.weight(.medium))
+                    .font(compact ? .body : .system(size: Design.sidebarTextSize, weight: .medium))
                     .lineLimit(1)
                 if !compact {
                     Text("\((profile.devicePath as NSString).lastPathComponent) · \(profile.lineSummary)")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, compact ? 1 : 3)
+        .padding(.vertical, compact ? 2 : 5)
     }
 }
 
@@ -331,27 +332,28 @@ struct HostRow: View {
     let sessions: [TerminalSession]
     @Environment(ThemeStore.self) private var themes
 
-    /// Hosts without a colour label get a quiet grey tile.
-    static let neutralTile = Color(red: 0.56, green: 0.58, blue: 0.62)
+    /// Hosts without a colour label get a calm slate-blue tile: colour without
+    /// claiming one of the label hues, which mean something the user chose.
+    static let neutralTile = Color(red: 0.36, green: 0.47, blue: 0.68)
 
     var body: some View {
         let compact = themes.appearance.compactSidebar
         let connected = sessions.filter(\.isConnected).count
-        HStack(spacing: compact ? 8 : 10) {
-            IconTile(systemImage: "server.rack", color: HostColor.color(host.colorLabel ?? host.group?.colorLabel) ?? Self.neutralTile, size: compact ? 20 : 28)
+        HStack(spacing: compact ? 8 : 12) {
+            IconTile(systemImage: "server.rack", color: HostColor.color(host.colorLabel ?? host.group?.colorLabel) ?? Self.neutralTile, size: compact ? 22 : 34)
                 .overlay(alignment: .bottomTrailing) {
                     if !sessions.isEmpty {
-                        StatusDot(color: statusColor, size: compact ? 6 : 8)
+                        StatusDot(color: statusColor, size: compact ? 6 : 9)
                             .offset(x: 3, y: 3)
                     }
                 }
             VStack(alignment: .leading, spacing: 1) {
                 Text(host.name)
-                    .font(compact ? .callout : .body.weight(.medium))
+                    .font(compact ? .body : .system(size: Design.sidebarTextSize, weight: .medium))
                     .lineLimit(1)
                 if !compact {
                     Text(host.displayTarget)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -362,15 +364,15 @@ struct HostRow: View {
                     .controlSize(.mini)
             } else if connected > 1 {
                 Text("\(connected)")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 7)
                     .padding(.vertical, 1)
-                    .background(.quaternary, in: Capsule())
+                    .background(Color.green.opacity(0.18), in: Capsule())
                     .help("\(connected) terminals connected")
             }
         }
-        .padding(.vertical, compact ? 1 : 3)
+        .padding(.vertical, compact ? 2 : 5)
     }
 
     private var statusColor: Color {

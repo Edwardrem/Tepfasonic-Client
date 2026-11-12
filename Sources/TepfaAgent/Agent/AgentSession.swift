@@ -64,6 +64,19 @@ public final class AgentSession {
         lastError = nil
     }
 
+    /// Drops the message with this id and everything after it, so an earlier
+    /// user message can be edited and sent again. Returns the dropped message,
+    /// or nil when a reply is running or the id is unknown.
+    @discardableResult
+    public func rewind(to messageID: UUID) -> AgentMessage? {
+        guard !isRunning, let index = messages.firstIndex(where: { $0.id == messageID }) else { return nil }
+        let message = messages[index]
+        messages.removeSubrange(index...)
+        lastError = nil
+        transcriptDidChange?()
+        return message
+    }
+
     private func start() {
         lastError = nil
         isRunning = true

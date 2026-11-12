@@ -18,6 +18,13 @@ import Testing
             #expect(TerminalTheme.contrast(theme.foreground, theme.background) >= 3.5, Comment(rawValue: theme.name))
         }
         #expect(TerminalTheme.bundled.count >= 12)
+        #expect(TerminalTheme.defaultDark.id == "builtin:lagoon")
+        #expect(TerminalTheme.defaultLight.id == "builtin:shoreline")
+        #expect(!TerminalTheme.defaultLight.isDark)
+        for theme in TerminalTheme.bundled {
+            guard let accent = theme.accent else { continue }
+            #expect(TerminalTheme.contrast(accent, theme.background) >= 3.0, Comment(rawValue: theme.name))
+        }
     }
 
     @Test func colourMaths() {

@@ -61,7 +61,7 @@ struct AppPalette {
         let raised = TerminalTheme.mix(bg, fg, dark ? 0.14 : 0.11)
         let separator = TerminalTheme.mix(bg, fg, dark ? 0.24 : 0.2)
         let secondary = TerminalTheme.mix(fg, bg, 0.38)
-        let accentHex = accentOverride.flatMap(TerminalTheme.normalize) ?? Self.accent(for: theme, background: bg)
+        let accentHex = accentOverride.flatMap(TerminalTheme.normalize) ?? theme.accent.flatMap(TerminalTheme.normalize) ?? Self.accent(for: theme, background: bg)
         let selection = TerminalTheme.normalize(theme.selection) ?? TerminalTheme.mix(bg, accentHex, 0.3)
 
         fromScheme = true

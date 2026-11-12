@@ -115,20 +115,21 @@ struct PortForwardRow: View {
     @Environment(PortForwardingManager.self) private var forwarding
 
     var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
+        HStack(spacing: 12) {
+            IconTile(systemImage: "arrow.left.arrow.right", color: Design.Tint.read, size: 30)
+                .overlay(alignment: .bottomTrailing) {
+                    StatusDot(color: statusColor, size: 9).offset(x: 3, y: 3)
+                }
                 .help(statusText)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
-                    Text(rule.displayName).lineLimit(1)
+                    Text(rule.displayName).font(.system(size: Design.sidebarTextSize, weight: .medium)).lineLimit(1)
                     if rule.autoStart {
-                        Image(systemName: "bolt.fill").font(.caption2).foregroundStyle(.secondary).help("Starts on connect")
+                        Image(systemName: "bolt.fill").font(.caption).foregroundStyle(Design.Tint.quick).help("Starts on connect")
                     }
                 }
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -137,7 +138,7 @@ struct PortForwardRow: View {
                 Button {
                     Task { await forwarding.stop(rule.uuid) }
                 } label: {
-                    Image(systemName: "stop.fill")
+                    Image(systemName: "stop.fill").font(.body).foregroundStyle(.red)
                 }
                 .buttonStyle(.borderless)
                 .help("Stop")
@@ -147,14 +148,14 @@ struct PortForwardRow: View {
                     guard let host = rule.host else { return }
                     forwarding.start(PortForwardDescriptor(rule), host: HostDescriptor(host))
                 } label: {
-                    Image(systemName: "play.fill")
+                    Image(systemName: "play.fill").font(.body).foregroundStyle(.green)
                 }
                 .buttonStyle(.borderless)
                 .help("Start")
                 .disabled(rule.host == nil)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 
     private var subtitle: String {

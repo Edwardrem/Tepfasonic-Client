@@ -190,6 +190,43 @@ struct AgentSessionTests {
         #expect(session.canSend)
     }
 
+    @Test func rewindDropsTheMessageAndEverythingAfterIt() async {
+        let host = FakeToolHost(hosts: [])
+        let (session, provider) = makeSession(host, responses: [FakeProvider.reply("one"), FakeProvider.reply("two"), FakeProvider.reply("three")])
+        session.send("first")
+        await waitUntilDone(session)
+        session.send("second")
+        await waitUntilDone(session)
+        #expect(session.messages.count == 4)
+        var saves = 0
+        session.transcriptDidChange = { saves += 1 }
+
+        #expect(session.rewind(to: UUID()) == nil)
+        let dropped = session.rewind(to: session.messages[2].id)
+        #expect(dropped?.text == "second")
+        #expect(session.messages.map(\.text) == ["first", "one"])
+        #expect(saves == 1)
+
+        session.send("second, edited")
+        await waitUntilDone(session)
+        #expect(session.messages.map(\.text) == ["first", "one", "second, edited", "three"])
+        #expect(provider.requests.last?.messages.map(\.text) == ["first", "one", "second, edited"])
+    }
+
+    @Test func plainTextTranscriptForTheClipboard() {
+        let messages: [AgentMessage] = [
+            .user("Check the disk"),
+            AgentMessage(role: .assistant, blocks: [
+                .thinking(text: "hidden", signature: nil),
+                .text("Looking."),
+                .toolUse(id: "t1", name: "run_command", input: ["host": "web-1", "command": "df -h"]),
+            ]),
+            AgentMessage(role: .user, blocks: [.toolResult(toolUseID: "t1", content: "secret output", isError: false)]),
+            AgentMessage(role: .assistant, blocks: [.text("Root is at 91%.")]),
+        ]
+        #expect(AgentTranscript.plainText(messages) == "You:\nCheck the disk\n\nClaude:\nLooking.\n[run_command on web-1: df -h]\nRoot is at 91%.")
+    }
+
     @Test func maxTokensAndRefusalStopTheLoop() async {
         let host = FakeToolHost(hosts: [])
         let (session, _) = makeSession(host, responses: [FakeProvider.reply("partial", stop: .maxTokens)])

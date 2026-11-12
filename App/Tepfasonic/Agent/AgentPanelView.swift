@@ -87,8 +87,12 @@ struct AgentPanelView: View {
                     }
                 }
             } label: {
-                Label(controller.scopeTitle, systemImage: scopeIcon)
-                    .lineLimit(1)
+                Label {
+                    Text(controller.scopeTitle)
+                } icon: {
+                    Image(systemName: scopeIcon).foregroundStyle(scopeColor)
+                }
+                .lineLimit(1)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -114,13 +118,19 @@ struct AgentPanelView: View {
                         }
                     }
                 }
+                Divider()
+                Button("Copy Conversation") { controller.copyConversation() }
+                    .disabled(controller.session?.messages.isEmpty != false)
                 if let current = controller.conversation {
-                    Divider()
                     Button("Delete This Conversation", role: .destructive) { controller.delete(current) }
                 }
             } label: {
-                Label(controller.conversation?.title ?? "New conversation", systemImage: "bubble.left.and.text.bubble.right")
-                    .lineLimit(1)
+                Label {
+                    Text(controller.conversation?.title ?? "New conversation")
+                } icon: {
+                    Image(systemName: "bubble.left.and.text.bubble.right.fill").foregroundStyle(Design.Tint.conversation)
+                }
+                .lineLimit(1)
             }
             .menuStyle(.borderlessButton)
             .fixedSize(horizontal: false, vertical: true)
@@ -131,18 +141,26 @@ struct AgentPanelView: View {
                 appState.isShowingAgentPanel = false
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 22, height: 22)
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 26, height: 26)
                     .background(.quaternary, in: Circle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Hide the Claude panel (⌘⇧A)")
         }
-        .font(.callout)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .font(.body)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(palette.surface)
+    }
+
+    private var scopeColor: Color {
+        switch controller.scope {
+        case .all: Design.Tint.fleet
+        case .host: Design.Tint.host
+        case .group: Design.Tint.group
+        }
     }
 
     private var scopeIcon: String {
@@ -158,19 +176,19 @@ struct AgentPanelView: View {
     private var emptyState: some View {
         VStack(spacing: 14) {
             Spacer()
-            IconTile(systemImage: "sparkles", color: palette.accent ?? .accentColor, size: 56)
+            IconTile(systemImage: "sparkles", color: palette.accent ?? .accentColor, size: 64)
             Text("Ask Claude")
-                .font(.title3.weight(.semibold))
+                .font(.title2.weight(.semibold))
                 .foregroundStyle(palette.text)
             Text("Claude inspects and operates your hosts over SSH, reads files you attach, and writes reports as PDF or Word. Every command shows in an agent tab, and the host's permission mode decides what asks first.")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 340)
             VStack(spacing: 6) {
-                suggestion("What is using the most disk on \(controller.scopeTitle == "All hosts" ? "each host" : controller.scopeTitle)?")
-                suggestion("Check the nginx error log for the last hour and summarise it.")
-                suggestion("Write a PDF report of CPU, memory and disk for the team.")
+                suggestion("What is using the most disk on \(controller.scopeTitle == "All hosts" ? "each host" : controller.scopeTitle)?", icon: "internaldrive.fill", color: Design.Tint.storage)
+                suggestion("Check the nginx error log for the last hour and summarise it.", icon: "text.magnifyingglass", color: Design.Tint.read)
+                suggestion("Write a PDF report of CPU, memory and disk for the team.", icon: "doc.richtext.fill", color: Design.Tint.document)
             }
             .padding(.top, 4)
             Spacer()
@@ -180,19 +198,23 @@ struct AgentPanelView: View {
         .padding(20)
     }
 
-    private func suggestion(_ text: String) -> some View {
+    private func suggestion(_ text: String, icon: String, color: Color) -> some View {
         Button {
             draft = text
             composerFocused = true
         } label: {
-            Text(text)
-                .font(.callout)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 10) {
+                IconTile(systemImage: icon, color: color, size: 30)
+                Text(text)
+                    .font(.body)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .card(padding: 10)
-        .frame(maxWidth: 340)
+        .frame(maxWidth: 360)
     }
 
     // MARK: Status and composer
@@ -225,10 +247,10 @@ struct AgentPanelView: View {
                     .controlSize(.small)
             }
         }
-        .font(.caption)
+        .font(.callout)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.top, 6)
+        .padding(.horizontal, 14)
+        .padding(.top, 7)
     }
 
     private var composer: some View {
@@ -268,6 +290,35 @@ private struct ComposerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if controller.editing != nil {
+                HStack(spacing: 6) {
+                    Image(systemName: "pencil").foregroundStyle(Design.Tint.edit)
+                    Text("Editing an earlier message. Sending replaces it and the replies after it.")
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    Button("Cancel") {
+                        controller.cancelEditing()
+                        draft = ""
+                    }
+                    .controlSize(.small)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 2)
+            }
+            // Above the input row, so the buttons under the cursor never move
+            // when a notice appears or clears.
+            if let message = dictation.errorMessage {
+                Label {
+                    Text(message)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 2)
+            }
             if !controller.pendingAttachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -283,22 +334,34 @@ private struct ComposerView: View {
                     controller.pickFiles()
                 } label: {
                     Image(systemName: "paperclip")
-                        .font(.system(size: 15, weight: .medium))
-                        .frame(width: 30, height: 30)
-                        .background(palette.raised, in: Circle())
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: 34, height: 34)
+                        .background(Design.Tint.attach.opacity(0.16), in: Circle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Design.Tint.attach)
                 .help("Attach images, PDFs, Word documents or text files (or drop them here)")
                 TextField(placeholder, text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
+                    .font(.system(size: Design.chatTextSize))
                     .lineLimit(1...8)
                     .focused(focused)
                     .onSubmit(send)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
+                    .padding(.leading, 12)
+                    .padding(.trailing, dictation.isListening ? 76 : 12)
+                    .padding(.vertical, 8)
                     .background(palette.raised, in: Design.shape(Design.radiusBubble))
-                    .overlay(Design.shape(Design.radiusBubble).strokeBorder(focused.wrappedValue ? (palette.accent ?? .accentColor).opacity(0.6) : palette.separator, lineWidth: focused.wrappedValue ? 1 : 0.5))
+                    .overlay(Design.shape(Design.radiusBubble).strokeBorder(dictation.isListening ? Color.red.opacity(0.7) : (focused.wrappedValue ? (palette.accent ?? .accentColor).opacity(0.6) : palette.separator), lineWidth: dictation.isListening || focused.wrappedValue ? 1 : 0.5))
+                    .overlay(alignment: .bottomTrailing) {
+                        // Proof that the recording is live: bars that follow the
+                        // voice and a running clock, inside the field so nothing
+                        // around it changes size.
+                        if dictation.isListening, let startedAt = dictation.startedAt {
+                            DictationMeterView(meter: dictation.meter, startedAt: startedAt)
+                                .padding(.trailing, 10)
+                                .padding(.bottom, 8)
+                        }
+                    }
                 if dictation.isAvailable {
                     Button {
                         toggleDictation()
@@ -307,19 +370,19 @@ private struct ComposerView: View {
                         // must not resize or animate, to avoid churning the
                         // responder tree while the cursor is over the button.
                         Image(systemName: dictation.isListening ? "stop.circle.fill" : "mic.fill")
-                            .font(.system(size: 15, weight: .medium))
-                            .frame(width: 30, height: 30)
-                            .background(dictation.isListening ? Color.red.opacity(0.16) : palette.raised, in: Circle())
-                            .foregroundStyle(dictation.isListening ? Color.red : .secondary)
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                            .background((dictation.isListening ? Color.red : Design.Tint.voice).opacity(0.16), in: Circle())
+                            .foregroundStyle(dictation.isListening ? Color.red : Design.Tint.voice)
                     }
                     .buttonStyle(.plain)
-                    .help(dictation.isListening ? "Stop dictation" : "Dictate your message — speech stays on this Mac")
+                    .help(dictation.isListening ? "Stop recording and keep the text" : "Dictate your message — speech stays on this Mac")
                 }
                 Button {
                     send()
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 28))
+                        .font(.system(size: 33))
                         .symbolRenderingMode(.hierarchical)
                 }
                 .buttonStyle(.plain)
@@ -328,14 +391,20 @@ private struct ComposerView: View {
                 .disabled(!canSend)
                 .help("Send (⌘↩)")
             }
-            if let message = dictation.errorMessage {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 2)
-            }
         }
-        .padding(10)
+        .padding(12)
+        .onChange(of: controller.editing?.id) { _, id in
+            // An earlier message was picked for editing: its text becomes the draft.
+            guard id != nil, let message = controller.editing else { return }
+            if dictation.isListening { dictation.finish() }
+            draft = message.text
+            focused.wrappedValue = true
+        }
+        #if DEBUG
+        .onAppear {
+            if CommandLine.arguments.contains("--qa-dictation-demo") { dictation.showListeningForQA() }
+        }
+        #endif
     }
 
     private func toggleDictation() {
@@ -351,7 +420,7 @@ private struct ComposerView: View {
     }
 
     private var placeholder: String {
-        if dictation.isListening { return "Listening…" }
+        if dictation.isListening { return "Listening… speak now" }
         return controller.pendingAttachments.isEmpty ? "Ask Claude about \(controller.scopeTitle)…" : "Say what to do with the files…"
     }
 
@@ -361,9 +430,46 @@ private struct ComposerView: View {
 
     private func send() {
         guard canSend else { return }
+        // Sending while recording stops the recording; the words already in the
+        // field are what goes, and a late result must not refill it.
+        if dictation.isListening { dictation.finish() }
         let text = draft
         draft = ""
         controller.send(text)
+    }
+}
+
+/// The live recording readout in the composer: five bars that light with the
+/// microphone's input level and the elapsed time. It redraws on its own clock
+/// and takes no part in hit-testing, so it never disturbs the views around it.
+private struct DictationMeterView: View {
+    let meter: DictationMeter
+    let startedAt: Date
+
+    private static let thresholds: [Float] = [0.06, 0.24, 0.42, 0.6, 0.78]
+    private static let heights: [CGFloat] = [6, 9, 12, 15, 18]
+
+    var body: some View {
+        TimelineView(.periodic(from: startedAt, by: 0.1)) { context in
+            let level = meter.level
+            let seconds = max(0, Int(context.date.timeIntervalSince(startedAt)))
+            HStack(spacing: 6) {
+                HStack(alignment: .center, spacing: 2) {
+                    ForEach(0..<5, id: \.self) { index in
+                        Capsule()
+                            .fill(Color.red.opacity(level >= Self.thresholds[index] ? 1 : 0.22))
+                            .frame(width: 3, height: Self.heights[index])
+                    }
+                }
+                .frame(height: 18)
+                Text("\(seconds / 60):\(String(format: "%02d", seconds % 60))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Recording")
     }
 }
 
@@ -387,7 +493,7 @@ struct AgentTranscriptView: View {
         let results = toolResults
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 16) {
                     ForEach(session.messages) { message in
                         AgentMessageView(message: message, results: results)
                     }
@@ -396,7 +502,7 @@ struct AgentTranscriptView: View {
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(12)
+                .padding(14)
             }
             .onChange(of: session.messages.count) { _, _ in proxy.scrollTo("bottom") }
             .onChange(of: session.streamingText.count) { _, _ in proxy.scrollTo("bottom") }
@@ -418,23 +524,27 @@ private struct AgentMessageView: View {
             if !text.isEmpty || !files.isEmpty {
                 HStack {
                     Spacer(minLength: 48)
-                    VStack(alignment: .trailing, spacing: 6) {
-                        if !files.isEmpty {
-                            HStack(spacing: 6) {
-                                ForEach(files) { file in
-                                    AttachmentChip(file: file, onAccent: true, onRemove: nil)
+                    VStack(alignment: .trailing, spacing: 3) {
+                        VStack(alignment: .trailing, spacing: 6) {
+                            if !files.isEmpty {
+                                HStack(spacing: 6) {
+                                    ForEach(files) { file in
+                                        AttachmentChip(file: file, onAccent: true, onRemove: nil)
+                                    }
                                 }
                             }
+                            if !text.isEmpty {
+                                Text(text)
+                                    .font(.system(size: Design.chatTextSize))
+                                    .textSelection(.enabled)
+                            }
                         }
-                        if !text.isEmpty {
-                            Text(text)
-                                .textSelection(.enabled)
-                        }
+                        .foregroundStyle(palette.onAccent)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(palette.accent ?? Color.accentColor, in: UnevenRoundedRectangle(topLeadingRadius: Design.radiusBubble, bottomLeadingRadius: Design.radiusBubble, bottomTrailingRadius: 5, topTrailingRadius: Design.radiusBubble, style: .continuous))
+                        MessageActions(message: message)
                     }
-                    .foregroundStyle(palette.onAccent)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(palette.accent ?? Color.accentColor, in: UnevenRoundedRectangle(topLeadingRadius: Design.radiusBubble, bottomLeadingRadius: Design.radiusBubble, bottomTrailingRadius: 5, topTrailingRadius: Design.radiusBubble, style: .continuous))
                 }
             }
         } else {
@@ -453,9 +563,59 @@ private struct AgentMessageView: View {
                         EmptyView()
                     }
                 }
+                if !message.text.isEmpty {
+                    MessageActions(message: message)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+/// The buttons under a message: copy its text, and for the user's own
+/// messages edit and resend. Always visible rather than revealed on hover, so
+/// moving the pointer over the transcript changes no views.
+private struct MessageActions: View {
+    let message: AgentMessage
+    @Environment(AgentPanelController.self) private var controller
+    @State private var copied = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if !message.text.isEmpty {
+                button(copied ? "checkmark" : "doc.on.doc.fill", color: copied ? .green : Design.Tint.copy, help: "Copy this message") {
+                    AgentPanelController.copy(message.text)
+                    copied = true
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        copied = false
+                    }
+                }
+            }
+            if message.role == .user {
+                button("pencil", color: Design.Tint.edit, help: "Edit this message and send it again") {
+                    controller.beginEditing(message)
+                }
+                .disabled(!controller.canEdit(message))
+            }
+        }
+        .contextMenu {
+            Button("Copy Conversation") { controller.copyConversation() }
+        }
+    }
+
+    private func button(_ systemImage: String, color: Color, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 26, height: 24)
+                .background(color.opacity(0.14), in: Design.shape(Design.radiusSmall))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(color)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
 
@@ -491,21 +651,22 @@ struct AttachmentChip: View {
                 Image(nsImage: thumbnail)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: 34, height: 34)
-                    .clipShape(Design.shape(7))
+                    .frame(width: 36, height: 36)
+                    .clipShape(Design.shape(8))
             } else {
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(width: 34, height: 34)
-                    .background(onAccent ? AnyShapeStyle(.white.opacity(0.18)) : AnyShapeStyle(palette.raised), in: Design.shape(7))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(onAccent ? AnyShapeStyle(.primary) : AnyShapeStyle(iconColor))
+                    .frame(width: 36, height: 36)
+                    .background(onAccent ? AnyShapeStyle(.white.opacity(0.18)) : AnyShapeStyle(iconColor.opacity(0.16)), in: Design.shape(8))
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(file.fileName)
-                    .font(.caption.weight(.medium))
+                    .font(.callout.weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(file.note.map { "\(file.sizeDescription) · \($0)" } ?? file.sizeDescription)
-                    .font(.caption2)
+                    .font(.caption)
                     .opacity(0.75)
                     .lineLimit(1)
             }
@@ -531,6 +692,14 @@ struct AttachmentChip: View {
             thumbnail = await Task.detached { NSImage(contentsOf: url) }.value
         }
         .help(file.isMissing ? "\(file.fileName) is no longer on this Mac" : file.fileName)
+    }
+
+    private var iconColor: Color {
+        switch file.kind {
+        case .image: Design.Tint.image
+        case .pdf: Design.Tint.document
+        case .text: Design.Tint.read
+        }
     }
 
     private var icon: String {
@@ -633,6 +802,7 @@ struct MarkdownText: View {
                 blockView(block)
             }
         }
+        .font(.system(size: Design.chatTextSize))
         .foregroundStyle(palette.text)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -745,12 +915,17 @@ private struct ThinkingView: View {
     var body: some View {
         DisclosureGroup(isExpanded: Binding(get: { isExpanded ?? expanded }, set: { isExpanded = $0 })) {
             Text(text)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 .padding(.top, 2)
         } label: {
-            Label("Thinking", systemImage: "brain").font(.caption).foregroundStyle(.secondary)
+            Label {
+                Text("Thinking").foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: "brain.fill").foregroundStyle(Design.Tint.thinking)
+            }
+            .font(.callout)
         }
     }
 }
@@ -783,6 +958,31 @@ private struct ToolCallView: View {
         }
     }
 
+    private var toolIcon: String {
+        switch AgentToolName(rawValue: name) {
+        case .runCommand: "terminal.fill"
+        case .readFile: "doc.text.fill"
+        case .writeFile: "square.and.pencil"
+        case .sftpTransfer: "arrow.up.arrow.down"
+        case .readTerminalBuffer: "text.alignleft"
+        case .listHosts: "server.rack"
+        case .createDocument: "doc.richtext.fill"
+        case nil: "wrench.and.screwdriver.fill"
+        }
+    }
+
+    private var toolColor: Color {
+        switch AgentToolName(rawValue: name) {
+        case .runCommand: Design.Tint.command
+        case .readFile, .readTerminalBuffer: Design.Tint.read
+        case .writeFile: Design.Tint.edit
+        case .sftpTransfer: Design.Tint.voice
+        case .listHosts: Design.Tint.fleet
+        case .createDocument: Design.Tint.document
+        case nil: Design.Tint.thinking
+        }
+    }
+
     private var statusColor: Color {
         guard let result else { return .orange }
         if result.isError { return .red }
@@ -803,16 +1003,19 @@ private struct ToolCallView: View {
                 Button {
                     isExpanded.toggle()
                 } label: {
-                    HStack(spacing: 6) {
-                        Circle().fill(statusColor).frame(width: 7, height: 7)
-                        Text(name).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        IconTile(systemImage: toolIcon, color: toolColor, size: 24)
+                            .overlay(alignment: .bottomTrailing) {
+                                StatusDot(color: statusColor, size: 7).offset(x: 3, y: 3)
+                            }
+                        Text(name).font(.callout.monospaced()).foregroundStyle(.secondary)
                         if let host = input["host"]?.stringValue, AgentToolName(rawValue: name) != .listHosts {
-                            Text(host).font(.caption).foregroundStyle(.secondary)
+                            Text(host).font(.callout).foregroundStyle(.secondary)
                         }
-                        Text(summary).font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
+                        Text(summary).font(.callout.monospaced()).lineLimit(1).truncationMode(.middle)
                         Spacer()
-                        if let exitStatus { Text("exit \(exitStatus)").font(.caption2).foregroundStyle(.secondary) }
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                        if let exitStatus { Text("exit \(exitStatus)").font(.caption).foregroundStyle(.secondary) }
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right").font(.caption).foregroundStyle(.tertiary)
                     }
                     .contentShape(Rectangle())
                 }
@@ -820,20 +1023,20 @@ private struct ToolCallView: View {
                 if isExpanded {
                     VStack(alignment: .leading, spacing: 4) {
                         if let reason = input["reason"]?.stringValue, !reason.isEmpty {
-                            Text(reason).font(.caption).foregroundStyle(.secondary)
+                            Text(reason).font(.callout).foregroundStyle(.secondary)
                         }
                         ScrollView(.horizontal) {
                             Text(result?.content ?? "Waiting…")
-                                .font(.caption.monospaced())
+                                .font(.callout.monospaced())
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .frame(maxHeight: 240)
                     }
-                    .padding(.leading, 13)
+                    .padding(.leading, 32)
                 }
             }
-            .card(padding: 8, radius: Design.radiusSmall)
+            .card(padding: 9, radius: Design.radiusMedium)
         }
     }
 }

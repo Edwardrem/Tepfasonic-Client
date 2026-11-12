@@ -169,25 +169,28 @@ struct SnippetRow: View {
     let snippet: Snippet
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 12) {
+          IconTile(systemImage: snippet.variables.isEmpty ? "chevron.left.forwardslash.chevron.right" : "curlybraces", color: snippet.variables.isEmpty ? Design.Tint.command : Design.Tint.edit, size: 30)
+          VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
-                Text(snippet.name).lineLimit(1)
+                Text(snippet.name).font(.system(size: Design.sidebarTextSize, weight: .medium)).lineLimit(1)
                 if !snippet.variables.isEmpty {
                     Image(systemName: "curlybraces")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                        .foregroundStyle(Design.Tint.edit)
                         .help("Asks for " + snippet.variables.map(\.name).joined(separator: ", "))
                 }
                 Spacer(minLength: 0)
                 if !snippet.tags.isEmpty {
-                    Text(snippet.tags.joined(separator: " ")).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                    Text(snippet.tags.joined(separator: " ")).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                 }
             }
             Text(snippet.command.split(whereSeparator: \.isNewline).first.map(String.init) ?? "")
-                .font(.caption.monospaced())
+                .font(.callout.monospaced())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+          }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 }
