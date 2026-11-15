@@ -113,6 +113,89 @@ public enum AgentContentBlock: Codable, Sendable, Equatable {
 }
 
 public enum AgentTranscript {
+    /// The result text for a tool call that never finished: the reply was cut
+    /// off or interrupted before the tool could run.
+    public static let interruptedToolCallText = "This tool call did not finish: the reply was interrupted before it ran."
+    /// The result text for a call whose result was lost with the app or the
+    /// conversation, so it may in fact have run.
+    public static let missingToolResultText = "No result was recorded for this tool call: the app was closed or the conversation was switched while it was in flight. It may have run. Check the current state before repeating it."
+    /// The result text when the output limit ended the reply before the call was answered.
+    public static let maxTokensToolCallText = "The reply reached the model's output limit, so this tool call did not run. If its input was cut off, send it again in smaller parts."
+    /// The result text for a call whose streamed input never parsed, so it cannot be run.
+    public static let cutOffInputToolCallText = "This tool call's input was not valid JSON (it may have been cut off), so it did not run. Send it again with valid JSON, in smaller parts if it was large."
+
+    /// Returns a transcript the Messages API accepts: every assistant turn with
+    /// tool calls is answered by the very next user turn, with exactly one result
+    /// per call in call order, results before any other block, and results that
+    /// answer nothing dropped. Missing results are added as errors that warn the
+    /// call may have run; a call with an empty id (a half-streamed block) or a
+    /// repeated id is dropped. Healthy history is returned unchanged, so the
+    /// function is idempotent.
+    public static func repaired(_ messages: [AgentMessage]) -> [AgentMessage] {
+        var out: [AgentMessage] = []
+        // The call ids of the immediately preceding assistant turn, still unanswered.
+        var pending: [String] = []
+
+        for message in messages {
+            if message.role == .assistant {
+                if !pending.isEmpty {
+                    out.append(answering(pending))
+                    pending = []
+                }
+                let copy = withoutInvalidToolUses(message)
+                // A turn that only held half-streamed calls has nothing left to show.
+                guard !copy.blocks.isEmpty || message.blocks.isEmpty else { continue }
+                out.append(copy)
+                pending = copy.toolUses.map(\.id)
+            } else {
+                var seen = Set<String>()
+                var answers: [String: AgentContentBlock] = [:]
+                var others: [AgentContentBlock] = []
+                for block in message.blocks {
+                    if case .toolResult(let id, _, _) = block {
+                        guard pending.contains(id), seen.insert(id).inserted else { continue }
+                        answers[id] = block
+                    } else {
+                        others.append(block)
+                    }
+                }
+                // Results lead the turn, in the order of the calls they answer.
+                var blocks: [AgentContentBlock] = pending.map { id in
+                    answers[id] ?? .toolResult(toolUseID: id, content: missingToolResultText, isError: true)
+                }
+                blocks.append(contentsOf: others)
+                pending = []
+                // A turn whose only blocks were orphaned results goes too.
+                guard !blocks.isEmpty || message.blocks.isEmpty else { continue }
+                var copy = message
+                copy.blocks = blocks
+                out.append(copy)
+            }
+        }
+        // A reply interrupted after its calls still needs an answer at the end.
+        if !pending.isEmpty { out.append(answering(pending)) }
+        return out
+    }
+
+    /// Drops calls that cannot be answered: a half-streamed block with no id,
+    /// and any later call that repeats an id already used in the same turn.
+    static func withoutInvalidToolUses(_ message: AgentMessage) -> AgentMessage {
+        guard message.role == .assistant else { return message }
+        var seen = Set<String>()
+        var copy = message
+        copy.blocks = message.blocks.filter { block in
+            guard case .toolUse(let id, _, _) = block else { return true }
+            return !id.isEmpty && seen.insert(id).inserted
+        }
+        return copy
+    }
+
+    private static func answering(_ ids: [String]) -> AgentMessage {
+        AgentMessage(role: .user, blocks: ids.map {
+            .toolResult(toolUseID: $0, content: missingToolResultText, isError: true)
+        })
+    }
+
     public static func encode(_ messages: [AgentMessage]) throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

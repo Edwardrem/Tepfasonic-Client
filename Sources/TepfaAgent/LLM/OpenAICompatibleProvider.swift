@@ -36,6 +36,9 @@ public struct OpenAICompatibleProvider: LLMProvider {
     }
 
     static func messagesJSON(_ messages: [AgentMessage]) -> [JSONValue] {
+        // An assistant message with `tool_calls` needs one `tool` message per id
+        // right after it; reuse the transcript repair so the rule lives once.
+        let messages = AgentTranscript.repaired(messages)
         var out: [JSONValue] = []
         for message in messages {
             switch message.role {
@@ -213,25 +216,33 @@ struct OpenAIStreamAssembler {
     mutating func finishIfNeeded() -> LLMResponse? {
         guard started, !finished else { return nil }
         finished = true
-        return buildResponse()
+        return buildResponse(droppedConnection: true)
     }
 
-    private func buildResponse() -> LLMResponse {
+    /// `droppedConnection` marks that the stream ended without its end marker, so
+    /// no finish reason arrived and a started call's arguments may be missing.
+    private func buildResponse(droppedConnection: Bool = false) -> LLMResponse {
         var blocks: [AgentContentBlock] = []
         if !reasoning.isEmpty { blocks.append(.thinking(text: reasoning, signature: nil)) }
         if !text.isEmpty { blocks.append(.text(text)) }
         for index in calls.keys.sorted() {
             let call = calls[index]!
-            let input = (try? JSONValue.parse(call.arguments.isEmpty ? "{}" : call.arguments)) ?? .object(["_invalid_json": .string(call.arguments)])
+            let input = ToolCallInput.decoded(call.arguments)
             blocks.append(.toolUse(id: call.id.isEmpty ? "call_\(index)" : call.id, name: call.name, input: input))
         }
         let stop: LLMStopReason
-        switch finishReason {
-        case "tool_calls", "function_call": stop = .toolUse
-        case "length": stop = .maxTokens
-        case "content_filter": stop = .refusal
-        case "stop", nil: stop = calls.isEmpty ? .endTurn : .toolUse
-        default: stop = .other
+        if droppedConnection, finishReason == nil {
+            // Without a finish reason the call never completed; answer it as
+            // interrupted rather than run it with whatever arrived.
+            stop = .other
+        } else {
+            switch finishReason {
+            case "tool_calls", "function_call": stop = .toolUse
+            case "length": stop = .maxTokens
+            case "content_filter": stop = .refusal
+            case "stop", nil: stop = calls.isEmpty ? .endTurn : .toolUse
+            default: stop = .other
+            }
         }
         return LLMResponse(message: AgentMessage(role: .assistant, blocks: blocks, model: model), stopReason: stop, model: model, usage: usage)
     }

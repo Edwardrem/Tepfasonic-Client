@@ -155,6 +155,41 @@ struct OpenAIAssemblerTests {
         #expect(body["tools"]?.arrayValue?.first?["type"]?.stringValue == "function")
         #expect(body["tool_choice"]?.stringValue == "auto")
     }
+
+    @Test func droppedStreamWithoutFinishReasonIsNotToolUse() throws {
+        var assembler = OpenAIStreamAssembler(model: "llama")
+        for data in [
+            #"{"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}"#,
+            #"{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"run_command","arguments":"{\"host\":"}}]},"finish_reason":null}]}"#,
+        ] {
+            _ = try assembler.handle(SSEParser.Event(name: nil, data: data))
+        }
+        guard let dropped = assembler.finishIfNeeded() else {
+            Issue.record("no response for a dropped stream")
+            return
+        }
+        #expect(dropped.stopReason == .other, "no finish reason means the connection dropped")
+        guard case .toolUse(_, _, let input)? = dropped.message.blocks.first else {
+            Issue.record("the started call is kept")
+            return
+        }
+        #expect(ToolCallInput.rawArguments(in: input) == "{\"host\":")
+
+        // The normal end-of-stream marker still makes calls a tool turn.
+        var complete = OpenAIStreamAssembler(model: "llama")
+        var events: [LLMStreamEvent] = []
+        for data in [
+            #"{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"run_command","arguments":"{}"}}]},"finish_reason":null}]}"#,
+            "[DONE]",
+        ] {
+            events += try complete.handle(SSEParser.Event(name: nil, data: data))
+        }
+        guard case .done(let response)? = events.last else {
+            Issue.record("no done event")
+            return
+        }
+        #expect(response.stopReason == .toolUse)
+    }
 }
 
 @Suite("Transcript")

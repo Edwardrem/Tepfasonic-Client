@@ -7,6 +7,10 @@ final class FakeProvider: LLMProvider, @unchecked Sendable {
     var responses: [LLMResponse]
     private(set) var requests: [LLMRequest] = []
     var delayBetweenDeltas: Duration = .zero
+    /// Awaited before `.done`, so a test can hold a run open inside the stream.
+    var holdBeforeDone: (@Sendable () async -> Void)?
+    /// Awaited once the stream has finished, so a test can tell it has unwound.
+    var afterStream: (@Sendable () async -> Void)?
 
     init(responses: [LLMResponse]) {
         self.responses = responses
@@ -30,6 +34,8 @@ final class FakeProvider: LLMProvider, @unchecked Sendable {
         requests.append(request)
         let response = responses.isEmpty ? Self.reply("(no scripted reply)") : responses.removeFirst()
         let delay = delayBetweenDeltas
+        let hold = holdBeforeDone
+        let after = afterStream
         return AsyncThrowingStream { continuation in
             Task {
                 continuation.yield(.started(model: response.model))
@@ -41,8 +47,10 @@ final class FakeProvider: LLMProvider, @unchecked Sendable {
                         }
                     }
                 }
+                if let hold { await hold() }
                 continuation.yield(.done(response))
                 continuation.finish()
+                if let after { await after() }
             }
         }
     }

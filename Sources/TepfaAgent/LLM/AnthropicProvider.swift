@@ -58,6 +58,9 @@ public struct AnthropicProvider: LLMProvider {
     }
 
     static func messagesJSON(_ messages: [AgentMessage]) -> JSONValue {
+        // The same repair the session applies, so a broken saved transcript can
+        // never reach the API even if it came in by another path.
+        let messages = AgentTranscript.repaired(messages)
         var out: [JSONValue] = []
         for message in messages {
             var blocks: [JSONValue] = []
@@ -268,7 +271,7 @@ struct AnthropicStreamAssembler {
             case .thinking(let text, let signature)?: content.append(.thinking(text: text, signature: signature.isEmpty ? nil : signature))
             case .redacted(let data)?: content.append(.redactedThinking(data: data))
             case .toolUse(let id, let name, let json)?:
-                let input = (try? JSONValue.parse(json.isEmpty ? "{}" : json)) ?? .object(["_invalid_json": .string(json)])
+                let input = ToolCallInput.decoded(json)
                 content.append(.toolUse(id: id, name: name, input: input))
             default: break
             }
