@@ -226,6 +226,9 @@ struct AgentPanelView: View {
             if let error = controller.setupError ?? controller.attachmentError ?? session?.lastError {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 Text(error).lineLimit(2).textSelection(.enabled)
+            } else if controller.isAttaching {
+                // Send is disabled until the files land; say why, in plain secondary text.
+                Text("Reading attachments…")
             } else if let session, session.isRunning {
                 ProgressView().controlSize(.small)
                 Text(session.activeTool.map { "Running \($0)…" } ?? (session.streamingThinking.isEmpty ? "Thinking…" : "Reasoning…"))
@@ -257,17 +260,51 @@ struct AgentPanelView: View {
         ComposerView(draft: $draft, focused: $composerFocused)
     }
 
-    /// Finder drops arrive as file URLs; everything else is ignored.
+    /// Finder drops arrive as file URLs; everything else is ignored. Every load starts here,
+    /// synchronously, because a drop session may end as soon as this returns; the URLs are then
+    /// collected in the providers' order and attached once, so the error covers the whole drop.
     private func attach(_ providers: [NSItemProvider]) -> Bool {
         let candidates = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
         guard !candidates.isEmpty else { return false }
-        for provider in candidates {
+        let dropped = DroppedFileURLs(count: candidates.count)
+        let group = DispatchGroup()
+        for (index, provider) in candidates.enumerated() {
+            group.enter()
             provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                defer { group.leave() }
                 guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                Task { @MainActor in controller.attach(urls: [url]) }
+                dropped.set(url, at: index)
+            }
+        }
+        group.notify(queue: .main) {
+            let urls = dropped.all()
+            MainActor.assumeIsolated {
+                controller.attach(urls: urls)
             }
         }
         return true
+    }
+}
+
+/// Collects the file URLs of one drop from the item providers' completion handlers, which run
+/// on arbitrary queues; the lock keeps the per-provider slots safe.
+private final class DroppedFileURLs: @unchecked Sendable {
+    private let lock = NSLock()
+    private var urls: [URL?]
+
+    init(count: Int) { urls = Array(repeating: nil, count: count) }
+
+    func set(_ url: URL, at index: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        urls[index] = url
+    }
+
+    /// Safe once every load has finished, which is what the dispatch group's notify guarantees.
+    func all() -> [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return urls.compactMap { $0 }
     }
 }
 
@@ -340,7 +377,7 @@ private struct ComposerView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Design.Tint.attach)
-                .help("Attach images, PDFs, Word documents or text files (or drop them here)")
+                .help("Attach images, PDFs, text files or a folder (or drop them here)")
                 TextField(placeholder, text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: Design.chatTextSize))
@@ -665,7 +702,7 @@ struct AttachmentChip: View {
                     .font(.callout.weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(file.note.map { "\(file.sizeDescription) · \($0)" } ?? file.sizeDescription)
+                Text(subtitle)
                     .font(.caption)
                     .opacity(0.75)
                     .lineLimit(1)
@@ -691,11 +728,26 @@ struct AttachmentChip: View {
             let url = file.url
             thumbnail = await Task.detached { NSImage(contentsOf: url) }.value
         }
-        .help(file.isMissing ? "\(file.fileName) is no longer on this Mac" : file.fileName)
+        .help(helpText)
+    }
+
+    /// A folder bundle stands for many files, so its count is more useful than its byte size.
+    private var subtitle: String {
+        if let files = file.folderFileCountDescription {
+            return "\(files) · \(file.sizeDescription)"
+        }
+        return file.note.map { "\(file.sizeDescription) · \($0)" } ?? file.sizeDescription
+    }
+
+    private var helpText: String {
+        if file.isMissing { return "\(file.fileName) is no longer on this Mac" }
+        if let note = file.note, file.folderFileCount != nil { return "\(file.fileName) · \(note)" }
+        return file.fileName
     }
 
     private var iconColor: Color {
-        switch file.kind {
+        if file.folderFileCount != nil { return Design.Tint.attach }
+        return switch file.kind {
         case .image: Design.Tint.image
         case .pdf: Design.Tint.document
         case .text: Design.Tint.read
@@ -703,7 +755,8 @@ struct AttachmentChip: View {
     }
 
     private var icon: String {
-        switch file.kind {
+        if file.folderFileCount != nil { return "folder.fill" }
+        return switch file.kind {
         case .image: "photo"
         case .pdf: "doc.richtext"
         case .text: file.fileName.lowercased().hasSuffix(".docx") ? "doc.text" : "doc.plaintext"

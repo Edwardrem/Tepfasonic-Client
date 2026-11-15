@@ -24,14 +24,19 @@ public struct AgentAttachment: Codable, Sendable, Equatable, Hashable, Identifia
     /// Set when the stored bytes are derived from the original (a Word
     /// document's text, a downscaled image).
     public var note: String?
+    /// Set on the text bundle of a folder the user attached: the number of
+    /// files it stands for, so the chip can show a folder icon and "N files".
+    /// Optional so transcripts saved before folders were supported still decode.
+    public var folderFileCount: Int?
 
-    public init(id: UUID = UUID(), fileName: String, mediaType: String, byteCount: Int, path: String, note: String? = nil) {
+    public init(id: UUID = UUID(), fileName: String, mediaType: String, byteCount: Int, path: String, note: String? = nil, folderFileCount: Int? = nil) {
         self.id = id
         self.fileName = fileName
         self.mediaType = mediaType
         self.byteCount = byteCount
         self.path = path
         self.note = note
+        self.folderFileCount = folderFileCount
     }
 
     public var kind: Kind {
@@ -71,5 +76,11 @@ public struct AgentAttachment: Codable, Sendable, Equatable, Hashable, Identifia
     /// A human-readable size such as "1.2 MB".
     public var sizeDescription: String {
         ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file)
+    }
+
+    /// "1 file" / "12 files" for a folder bundle's chip, or nil when this is not a folder.
+    public var folderFileCountDescription: String? {
+        guard let folderFileCount else { return nil }
+        return folderFileCount == 1 ? "1 file" : "\(folderFileCount.formatted()) files"
     }
 }

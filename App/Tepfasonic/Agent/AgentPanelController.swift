@@ -34,6 +34,10 @@ final class AgentPanelController {
     private(set) var pendingAttachments: [AgentAttachment] = []
     /// Why the last file could not be attached.
     private(set) var attachmentError: String?
+    /// True while files or folders are being read, so a message cannot be sent before they land.
+    private(set) var isAttaching = false
+    /// Number of imports in flight, so overlapping calls keep `isAttaching` right.
+    private var attachCount = 0
     /// The earlier user message being rewritten in the composer. Sending
     /// replaces it and everything after it.
     private(set) var editing: AgentMessage?
@@ -134,17 +138,52 @@ final class AgentPanelController {
 
     // MARK: Attachments
 
-    /// Imports each file (images, PDFs, Word documents, text) into the pending list.
+    /// Imports each item (files: images, PDFs, Word documents, text; folders: a text bundle
+    /// plus the images and PDFs inside) off the main actor, so a folder of photos and Word
+    /// documents does not freeze the window. Items keep the order they were given; one that
+    /// cannot be read reports why and the rest still attach.
     func attach(urls: [URL]) {
-        for url in urls {
-            do {
-                let file = try AttachmentImporter.importFile(at: url, into: Self.attachmentsDirectory)
-                pendingAttachments.append(file)
-                attachmentError = nil
-            } catch {
-                attachmentError = error.localizedDescription
+        guard !urls.isEmpty else { return }
+        // Resolve folders and the store location here; plain values cross to the background task.
+        let items = urls.map { (url: $0, isDirectory: Self.isDirectory($0)) }
+        let directory = Self.attachmentsDirectory
+        attachmentError = nil
+        attachCount += 1
+        isAttaching = true
+        Task.detached(priority: .userInitiated) {
+            var attachments: [AgentAttachment] = []
+            var failures: [String] = []
+            for item in items {
+                do {
+                    if item.isDirectory {
+                        attachments.append(contentsOf: try AttachmentImporter.importFolder(at: item.url, into: directory))
+                    } else {
+                        attachments.append(try AttachmentImporter.importFile(at: item.url, into: directory))
+                    }
+                } catch {
+                    failures.append(error.localizedDescription)
+                }
+            }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.pendingAttachments.append(contentsOf: attachments)
+                if let first = failures.first {
+                    let more = failures.count - 1
+                    self.attachmentError = more > 0 ? "\(first) (and \(more) more could not be attached)" : first
+                } else {
+                    self.attachmentError = nil
+                }
+                self.attachCount -= 1
+                self.isAttaching = self.attachCount > 0
             }
         }
+    }
+
+    /// A package (`Foo.app`, `Notes.rtfd`, a project bundle) is a directory on disk but belongs to
+    /// `importFile`: walking it would attach its resource images as a folder.
+    private static func isDirectory(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey]) else { return false }
+        return values.isDirectory == true && values.isPackage != true
     }
 
     func removeAttachment(_ file: AgentAttachment) {
@@ -157,16 +196,17 @@ final class AgentPanelController {
         attachmentError = nil
     }
 
-    /// The standard open panel, limited to what the models can read.
+    /// The standard open panel, limited to what the models can read, files or whole folders.
     func pickFiles() {
         let panel = NSOpenPanel()
-        panel.title = "Attach Files"
-        panel.message = "Images, PDFs, Word documents and text files such as logs, configs, code and CSV."
-        panel.prompt = "Attach"
+        panel.title = "Attach Files or Folders"
+        panel.message = "Images, PDFs, Word documents and text files such as logs, configs, code and CSV — or a folder, to send the files and images inside it."
+        panel.prompt = "Attach Files or Folders"
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [.image, .pdf, .text, .sourceCode, .json, .xml, .yaml, .propertyList, .commaSeparatedText, .log, .shellScript, .data]
+        // `.folder` keeps directories selectable next to the file types the models can read.
+        panel.allowedContentTypes = [.folder, .image, .pdf, .text, .sourceCode, .json, .xml, .yaml, .propertyList, .commaSeparatedText, .log, .shellScript, .data]
         panel.begin { [weak self] response in
             guard response == .OK else { return }
             Task { @MainActor in self?.attach(urls: panel.urls) }
@@ -214,7 +254,7 @@ final class AgentPanelController {
     // MARK: Sending
 
     var canSend: Bool {
-        session?.isRunning != true
+        session?.isRunning != true && !isAttaching
     }
 
     func send(_ text: String) {

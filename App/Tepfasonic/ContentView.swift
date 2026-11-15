@@ -284,7 +284,8 @@ struct ContentView: View {
 
     /// `--window=identities|settings|export|ssh-config-export|agent|…` opens a window at launch (used by UI checks).
     /// Debug builds also take `--seed-demo`, `--sidebar=hosts|snippets|history`, `--qa-agent-demo`,
-    /// `--connect=<host name>` and `--qa-type=<text>` (typed into the new session).
+    /// `--qa-attach=<path>` (repeatable, files or folders put on the composer), `--connect=<host name>`
+    /// and `--qa-type=<text>` (typed into the new session).
     private func openWindowsRequestedOnLaunch() {
         #if DEBUG
         if CommandLine.arguments.contains("--seed-demo") { DemoData.seedIfEmpty(in: modelContext) }
@@ -340,6 +341,20 @@ struct ContentView: View {
                     try? await Task.sleep(for: .seconds(1))
                     agent.beginEditing(first)
                 }
+            }
+        }
+        // `--qa-attach=<path>` (repeatable): files or folders put on the composer once the panel
+        // is on screen, so an attachment can be screenshotted without clicking.
+        let qaAttachPaths = CommandLine.arguments.filter { $0.hasPrefix("--qa-attach=") }.map { String($0.dropFirst("--qa-attach=".count)) }
+        if !qaAttachPaths.isEmpty {
+            appState.isShowingAgentPanel = true
+            Task { @MainActor in
+                // Wait for the panel to build its controller (bounded), then attach.
+                for _ in 0..<20 where agent.session == nil {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+                try? await Task.sleep(for: .milliseconds(300))
+                agent.attach(urls: qaAttachPaths.map { URL(fileURLWithPath: $0) })
             }
         }
         if CommandLine.arguments.contains("--qa-approval"), let host = hosts.first {
