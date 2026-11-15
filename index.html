@@ -107,6 +107,12 @@
   </section>
 
   <section>
+    <h2>New in 0.3.8</h2>
+    <ul>
+      <li>Fixed: a Claude conversation could get stuck on the error "<code>tool_use</code> ids were found without <code>tool_result</code> blocks" after a reply was cut off or interrupted during a tool call. Such calls are now answered automatically, and conversations saved in that state are repaired when you open them.</li>
+      <li>Fixed: opening another conversation while Claude was still replying could save the unfinished reply into the conversation you opened.</li>
+      <li>Attach a folder to a message: its text files go as one bundle with a listing, and the images and PDFs inside come along. Hidden files, build output and anything that looks like a key or credential stay on your Mac.</li>
+    </ul>
     <h2>New in 0.3.7</h2>
     <ul>
       <li>Copy any message in the Claude chat, or the whole conversation, and edit one of your own messages to send it again.</li>
@@ -144,7 +150,7 @@
     </ul>
     <h2>New in 0.3.0</h2>
     <ul>
-      <li>Attach files to Claude: images, PDFs, Word documents and text files such as logs and configs, from the paperclip or by dropping them on the panel.</li>
+      <li>Attach files or a whole folder to Claude: images, PDFs, Word documents and text files such as logs and configs, from the paperclip or by dropping them on the panel.</li>
       <li>Ask for a report as a PDF or a Word document and Claude writes it: paginated PDFs with headings, lists, tables and code, real <code>.docx</code> files, or HTML, Markdown, text and CSV, each shown as a card you can open or save.</li>
       <li>The colour scheme now colours the whole app: sidebar, tabs, status bar, Claude panel, sheets and every window take their palette from Solarized, Nord, Gruvbox or whichever scheme is in use. Switch it off in Settings → Appearance for the standard materials.</li>
       <li>A quieter interface in the iOS idiom: icon tiles for hosts, pill tabs, a status capsule, message bubbles and a rounded composer.</li>
