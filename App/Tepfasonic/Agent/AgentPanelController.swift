@@ -42,6 +42,8 @@ final class AgentPanelController {
     /// replaces it and everything after it.
     private(set) var editing: AgentMessage?
     private var providerConfiguration: LLMProviderConfiguration?
+    /// The selected kind's key version when the current provider was built.
+    private var providerKeyVersion = 0
 
     /// Copies of attached files live here, one folder per attachment.
     static var attachmentsDirectory: URL {
@@ -270,9 +272,12 @@ final class AgentPanelController {
         setupError = nil
         Task {
             do {
-                if providerConfiguration != settings.configuration || session.provider is PlaceholderProvider {
+                if providerConfiguration != settings.configuration
+                    || providerKeyVersion != settings.keyVersion
+                    || session.provider is PlaceholderProvider {
                     session.provider = try await settings.makeProvider()
                     providerConfiguration = settings.configuration
+                    providerKeyVersion = settings.keyVersion
                 }
                 session.systemPrompt = systemPrompt()
                 if let edited, editing?.id == edited.id {
@@ -305,15 +310,16 @@ final class AgentPanelController {
 
     private func systemPrompt() -> String {
         let infos = toolHost.hosts()
+        let providerName = settings.configuration.kind.agentName
         switch scope {
         case .all:
-            return AgentSystemPrompt.build(hosts: infos, focus: nil)
+            return AgentSystemPrompt.build(hosts: infos, focus: nil, providerName: providerName)
         case .host(let id):
-            return AgentSystemPrompt.build(hosts: infos, focus: infos.first { $0.id == id })
+            return AgentSystemPrompt.build(hosts: infos, focus: infos.first { $0.id == id }, providerName: providerName)
         case .group(let id):
             let group = groups.first { $0.uuid == id }
             let members = Set(group?.hosts.map(\.uuid) ?? [])
-            return AgentSystemPrompt.build(hosts: infos.filter { members.contains($0.id) }, focus: nil, groupName: group?.name)
+            return AgentSystemPrompt.build(hosts: infos.filter { members.contains($0.id) }, focus: nil, groupName: group?.name, providerName: providerName)
         }
     }
 

@@ -115,6 +115,23 @@ public struct LLMProviderConfiguration: Codable, Sendable, Equatable {
             case .openAICompatible: "AI"
             }
         }
+
+        /// Anthropic and Caimex need a key; a local OpenAI-compatible server may have none.
+        public var requiresAPIKey: Bool {
+            switch self {
+            case .anthropic, .caimex: true
+            case .openAICompatible: false
+            }
+        }
+
+        /// The provider name for messages about its key, so the Anthropic wording stays "Anthropic".
+        public var keyName: String {
+            switch self {
+            case .anthropic: "Anthropic"
+            case .caimex: "Caimex"
+            case .openAICompatible: "endpoint"
+            }
+        }
     }
 
     public var kind: Kind

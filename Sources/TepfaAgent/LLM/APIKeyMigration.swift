@@ -54,6 +54,25 @@ public struct APIKeyMigration {
         return kind.keychainAccount
     }
 
+    /// Whether the kind has a key it may use right now: false while its account is withheld, and false
+    /// when the store cannot be read. Only that kind's own account is checked.
+    public func hasKey(for kind: LLMProviderConfiguration.Kind) -> Bool {
+        guard let account = account(for: kind) else { return false }
+        return (try? store.itemExists(account: account)) ?? false
+    }
+
+    /// The account a key typed in Settings may be saved into. When a pending move withholds it, this
+    /// retries the move once; nil still means "do not write", so the caller must refuse rather than fall
+    /// back to the old account. A recorded decision is never retaken, whatever `legacyKind` says.
+    public func accountForSaving(
+        _ kind: LLMProviderConfiguration.Kind,
+        legacyKind: LLMProviderConfiguration.Kind
+    ) -> String? {
+        if let account = account(for: kind) { return account }
+        run(legacyKind: legacyKind)
+        return account(for: kind)
+    }
+
     private var recordedState: State? {
         defaults.string(forKey: Self.defaultsKey).flatMap(State.init(rawValue:))
     }

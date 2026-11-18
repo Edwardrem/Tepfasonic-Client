@@ -91,15 +91,19 @@ conversations. Your real hosts never leave your Mac.
   delete, new folder, show hidden files, and Open / Open With… for remote
   files, which are uploaded again whenever the editor saves them. Transfers
   pipeline 16 requests of 32 KiB and resume from where they stopped.
-- **Claude agent panel** (⌘⇧A): bring your own Anthropic API key (Keychain) or
-  point the panel at any OpenAI-compatible endpoint. Dictate a message with the
-  microphone button: speech is transcribed on your Mac (nothing leaves it) and
-  lands in the composer to edit and send. Attach files or a whole folder to a
-  message with the paperclip or by dropping them on the panel: images, PDFs,
-  Word documents (sent as their text) and text files such as logs, configs,
-  code and CSV go to the model with your question. A folder travels as one
-  bundle of its text files with a listing, plus the images and PDFs inside it;
-  hidden files, build output, symbolic links and anything that looks like a
+- **Claude agent panel** (⌘⇧A): bring your own Anthropic or Caimex API key, kept
+  apart in the Keychain, or point the panel at any OpenAI-compatible endpoint.
+  Each provider keeps its own key: after upgrading from 0.3.8 the saved key stays
+  with the provider that was selected, and the other asks for its own. With
+  Caimex you pick a model from the gateway's list (the agent needs one with tool
+  calling). Dictate a message with the microphone button: speech is transcribed
+  on your Mac (nothing leaves it) and lands in the composer to edit and send.
+  Attach files or a whole folder to a message with the paperclip or by dropping
+  them on the panel: images, PDFs, Word documents (sent as their text) and text
+  files such as logs, configs, code and CSV go to the model with your question.
+  A folder travels as one bundle of its text files with a listing, plus the
+  images and PDFs inside it; hidden files, build output, symbolic links and
+  anything that looks like a
   key or credential are left out and listed. Ask for a report and Claude
   writes it with `create_document` as PDF (paginated, with headings, lists,
   tables and code blocks), Word `.docx`, HTML, Markdown, text or CSV; the file
@@ -234,7 +238,7 @@ Releases are cut by pushing a `vX.Y.Z` tag; see [docs/RELEASING.md](docs/RELEASI
 | `Sources/TepfaCore` | SwiftData models (`SSHHost`, `HostGroup`, `Identity`, `Snippet`, `PortForwardRule`, `SerialProfile`, `TerminalThemeRecord`, agent records), known-hosts store, Keychain `SecretStore`, Touch ID `Vault`, `.tepfa` export/import, interop parsers, `TerminalTheme` with bundled schemes and importers, cloud providers (SigV4, EC2, DigitalOcean, Azure), appcast parsing |
 | `Sources/TepfaSSH` | SwiftNIO SSH transport: `SSHConnection` (shell, exec, subsystems, direct-tcpip, remote forwards, proxies and jump hosts), key pairs and formats, host-key verification, port forwarders (local, SOCKS5, remote), `SFTPClient` |
 | `Sources/TepfaTerminal` | `TerminalSession` (SSH chains and serial), workspace and pane tree, credential store and resolver, `KeyPusher`, `PortForwardingManager`, `TransferQueue`, `SerialPort`, the SwiftTerm bridge and `TerminalAppearance` |
-| `Sources/TepfaAgent` | Agent session, LLM providers (Anthropic, OpenAI-compatible), tools, guardrails, MCP server |
+| `Sources/TepfaAgent` | Agent session, LLM providers (Anthropic, Caimex, OpenAI-compatible), tools, guardrails, MCP server |
 | `Sources/tepfasonic-mcp` | The stdio bridge Claude Desktop and Claude Code launch |
 | `App/Tepfasonic` | The SwiftUI app: sidebar, editors, workspace, Identities & Keys, Files (SFTP), Theme Editor, settings, prompts, updater; `Fonts/` holds JetBrains Mono (OFL) |
 | `Tests/` | Unit tests plus opt-in live tests against a real sshd |

@@ -233,6 +233,7 @@ struct AgentPanelView: View {
                 ProgressView().controlSize(.small)
                 Text(session.activeTool.map { "Running \($0)…" } ?? (session.streamingThinking.isEmpty ? "Thinking…" : "Reasoning…"))
             } else if let session, let model = session.lastModel {
+                providerBadge
                 Text(model)
                 if session.servedByFallback {
                     Text("fallback").padding(.horizontal, 5).background(.orange.opacity(0.25), in: Capsule())
@@ -241,6 +242,7 @@ struct AgentPanelView: View {
                     Text("\(session.usage.inputTokens.formatted()) in · \(session.usage.outputTokens.formatted()) out")
                 }
             } else {
+                providerBadge
                 Text(AgentSettings.shared.configuration.model)
             }
             Spacer()
@@ -254,6 +256,16 @@ struct AgentPanelView: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 14)
         .padding(.top, 7)
+    }
+
+    /// Says who is answering when it is not Anthropic, so a Caimex model is not mistaken for Claude.
+    @ViewBuilder
+    private var providerBadge: some View {
+        if AgentSettings.shared.configuration.kind == .caimex {
+            Text("Caimex")
+                .padding(.horizontal, 5)
+                .background(Design.Tint.conversation.opacity(0.22), in: Capsule())
+        }
     }
 
     private var composer: some View {

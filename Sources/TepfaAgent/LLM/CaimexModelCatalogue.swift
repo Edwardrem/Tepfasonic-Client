@@ -12,6 +12,20 @@ public struct CaimexModel: Sendable, Equatable, Identifiable {
     }
 }
 
+/// The ids a Caimex model picker offers: the gateway's order, with the model the user already has kept
+/// first when the list no longer carries it. Ids stay opaque and are never trimmed or split.
+public struct CaimexModelChoices: Sendable, Equatable {
+    public let ids: [String]
+
+    public init(models: [CaimexModel], current: String) {
+        var ids = models.map(\.id)
+        if !current.isEmpty, !ids.contains(current) {
+            ids.insert(current, at: 0)
+        }
+        self.ids = ids
+    }
+}
+
 /// Loads the Caimex model list. The gateway answers without a key, so the picker
 /// can fill before one is saved.
 public struct CaimexModelCatalogue: Sendable {
