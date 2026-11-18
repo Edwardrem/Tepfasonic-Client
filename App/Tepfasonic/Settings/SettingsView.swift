@@ -2,24 +2,45 @@ import SwiftUI
 import TepfaTerminal
 
 struct SettingsView: View {
+    @State private var tab = SettingsView.initialTab
+
+    /// Debug builds take `--settings-tab=<name>` (general, appearance, security, known-hosts, data,
+    /// claude, cloud, updates) so a UI check can open Settings on one pane.
+    private static var initialTab: String {
+        #if DEBUG
+        if let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--settings-tab=") }) {
+            return String(argument.dropFirst("--settings-tab=".count))
+        }
+        #endif
+        return "general"
+    }
+
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             GeneralSettingsView()
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag("general")
             AppearanceSettingsView()
                 .tabItem { Label("Appearance", systemImage: "paintpalette") }
+                .tag("appearance")
             SecuritySettingsView()
                 .tabItem { Label("Security", systemImage: "lock.shield") }
+                .tag("security")
             KnownHostsSettingsView()
                 .tabItem { Label("Known Hosts", systemImage: "checkmark.shield") }
+                .tag("known-hosts")
             DataSettingsView()
                 .tabItem { Label("Data", systemImage: "externaldrive") }
+                .tag("data")
             ClaudeSettingsView()
                 .tabItem { Label("Claude", systemImage: "sparkles") }
+                .tag("claude")
             CloudSettingsView()
                 .tabItem { Label("Cloud", systemImage: "cloud") }
+                .tag("cloud")
             UpdatesSettingsView()
                 .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
+                .tag("updates")
         }
         .frame(width: 620)
     }

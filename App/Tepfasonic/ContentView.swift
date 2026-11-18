@@ -15,6 +15,7 @@ struct ContentView: View {
     @Environment(ThemeStore.self) private var themes
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     @Query private var hosts: [SSHHost]
     @Query private var forwardRules: [PortForwardRule]
     @State private var restored = false
@@ -293,7 +294,7 @@ struct ContentView: View {
         for argument in CommandLine.arguments where argument.hasPrefix("--window=") {
             switch argument.dropFirst("--window=".count) {
             case "identities": openWindow(id: IdentitiesView.windowID)
-            case "settings": NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            case "settings": openSettings()
             case "export": appState.isExporting = true
             case "ssh-config-export": appState.isExportingSSHConfig = true
             case "agent": appState.isShowingAgentPanel = true
