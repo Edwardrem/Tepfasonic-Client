@@ -1,4 +1,5 @@
 import Foundation
+import TepfaCore
 
 public struct LLMRequest: Sendable {
     public var system: String
@@ -74,6 +75,14 @@ public enum LLMError: LocalizedError, Equatable {
         case .invalidResponse(let detail): "Unexpected response from the API: \(detail)"
         }
     }
+
+    /// OpenAI-shaped gateways report `{"error": {"type": …, "message": …}}`; fall back to the raw body.
+    static func fromHTTP(status: Int, body: Data) -> LLMError {
+        if let json = try? JSONValue.parse(body), let error = json["error"], let message = error["message"]?.stringValue {
+            return .api(type: error["type"]?.stringValue ?? "http_\(status)", message: message)
+        }
+        return .httpStatus(status, String(decoding: body.prefix(300), as: UTF8.self))
+    }
 }
 
 /// A model endpoint the agent can talk to.
@@ -87,32 +96,100 @@ public protocol LLMProvider: Sendable {
 public struct LLMProviderConfiguration: Codable, Sendable, Equatable {
     public enum Kind: String, Codable, Sendable, CaseIterable {
         case anthropic
+        case caimex
         case openAICompatible = "openai-compatible"
 
         public var displayName: String {
             switch self {
             case .anthropic: "Anthropic (Claude)"
+            case .caimex: "Caimex"
             case .openAICompatible: "OpenAI-compatible endpoint"
+            }
+        }
+
+        /// The name the agent gives itself in the system prompt. Anthropic keeps "Claude".
+        public var agentName: String {
+            switch self {
+            case .anthropic: "Claude"
+            case .caimex: "Caimex"
+            case .openAICompatible: "OpenAI-compatible"
             }
         }
     }
 
     public var kind: Kind
-    public var model: String
+    /// One model per kind, so switching kind gives each one back. Read `model` for the current kind.
+    public private(set) var models: [Kind: String]
     /// Only for OpenAI-compatible endpoints, e.g. http://localhost:11434/v1.
     public var baseURL: String
     /// Anthropic `output_config.effort`; nil leaves the model's default.
     public var effort: String?
 
+    /// The fixed Caimex gateway. Nothing the user types can change it.
+    public static let caimexBaseURL = URL(string: "https://api.caimex.ai/v1")!
+
     public static let defaultAnthropicModel = "claude-opus-5-5"
+    public static let defaultCaimexModel = "deepseek-v4-flash"
     public static let anthropicModels = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"]
     public static let efforts = ["low", "medium", "high", "xhigh", "max"]
 
-    public init(kind: Kind = .anthropic, model: String = LLMProviderConfiguration.defaultAnthropicModel, baseURL: String = "", effort: String? = nil) {
+    public static func defaultModel(for kind: Kind) -> String {
+        switch kind {
+        case .anthropic: defaultAnthropicModel
+        case .caimex: defaultCaimexModel
+        case .openAICompatible: ""
+        }
+    }
+
+    /// The model of the current kind; setting it leaves the other kinds alone.
+    public var model: String {
+        get { models[kind] ?? Self.defaultModel(for: kind) }
+        set { models[kind] = newValue }
+    }
+
+    public init(kind: Kind = .anthropic, model: String? = nil, baseURL: String = "", effort: String? = nil) {
         self.kind = kind
-        self.model = model
         self.baseURL = baseURL
         self.effort = effort
+        var models = Dictionary(uniqueKeysWithValues: Kind.allCases.map { ($0, Self.defaultModel(for: $0)) })
+        models[kind] = model ?? Self.defaultModel(for: kind)
+        self.models = models
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, model, models, baseURL, effort
+    }
+
+    /// Reads 0.3.8 files (one `model` for the saved kind) and the per-kind map this version writes.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decodeIfPresent(Kind.self, forKey: .kind) ?? .anthropic
+        self.kind = kind
+        self.baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
+        self.effort = try container.decodeIfPresent(String.self, forKey: .effort)
+
+        var models = Dictionary(uniqueKeysWithValues: Kind.allCases.map { ($0, Self.defaultModel(for: $0)) })
+        let stored = try container.decodeIfPresent([String: String].self, forKey: .models)
+        if let stored {
+            for (raw, value) in stored {
+                if let key = Kind(rawValue: raw) { models[key] = value }
+            }
+        }
+        // 0.3.8 had no per-kind map: its one model belonged to the saved kind.
+        if let legacy = try container.decodeIfPresent(String.self, forKey: .model), stored?[kind.rawValue] == nil {
+            models[kind] = legacy
+        }
+        self.models = models
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(Dictionary(uniqueKeysWithValues: models.map { ($0.key.rawValue, $0.value) }), forKey: .models)
+        // Keep the single `model` key so readers that predate the per-kind map see the current model.
+        try container.encode(model, forKey: .model)
+        try container.encode(baseURL, forKey: .baseURL)
+        try container.encodeIfPresent(effort, forKey: .effort)
     }
 
     /// Builds the provider. Throws when the configuration is incomplete.
@@ -121,11 +198,25 @@ public struct LLMProviderConfiguration: Codable, Sendable, Equatable {
         case .anthropic:
             guard let apiKey, !apiKey.isEmpty else { throw LLMError.missingAPIKey }
             return AnthropicProvider(apiKey: apiKey, model: model, effort: effort)
+        case .caimex:
+            guard let apiKey, !apiKey.isEmpty else { throw LLMError.missingAPIKey }
+            return OpenAICompatibleProvider(baseURL: Self.caimexBaseURL, apiKey: apiKey, model: model, name: Kind.caimex.displayName)
         case .openAICompatible:
             guard let url = URL(string: baseURL.trimmingCharacters(in: .whitespaces)), url.scheme != nil, url.host != nil else {
                 throw LLMError.invalidBaseURL(baseURL)
             }
             return OpenAICompatibleProvider(baseURL: url, apiKey: apiKey ?? "", model: model)
+        }
+    }
+}
+
+extension LLMProviderConfiguration.Kind {
+    /// The Keychain account holding this kind's key. Anthropic and OpenAI-compatible share the old account,
+    /// so an existing saved key keeps working.
+    public var keychainAccount: String {
+        switch self {
+        case .caimex: SecretAccount.caimexAPIKey
+        case .anthropic, .openAICompatible: SecretAccount.agentAPIKey
         }
     }
 }

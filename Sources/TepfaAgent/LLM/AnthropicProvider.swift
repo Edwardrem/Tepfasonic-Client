@@ -134,7 +134,7 @@ public struct AnthropicProvider: LLMProvider {
         if http.statusCode != 200 {
             var body = Data()
             for try await byte in bytes { body.append(byte); if body.count > 64_000 { break } }
-            throw Self.error(status: http.statusCode, body: body)
+            throw LLMError.fromHTTP(status: http.statusCode, body: body)
         }
 
         var parser = SSEParser()
@@ -155,13 +155,6 @@ public struct AnthropicProvider: LLMProvider {
         if !line.isEmpty { try handle(parser.feed(String(decoding: line, as: UTF8.self))) }
         if let last = parser.finish() { try handle([last]) }
         if let response = assembler.finishIfNeeded() { continuation.yield(.done(response)) }
-    }
-
-    static func error(status: Int, body: Data) -> LLMError {
-        if let json = try? JSONValue.parse(body), let error = json["error"], let message = error["message"]?.stringValue {
-            return .api(type: error["type"]?.stringValue ?? "http_\(status)", message: message)
-        }
-        return .httpStatus(status, String(decoding: body.prefix(300), as: UTF8.self))
     }
 }
 

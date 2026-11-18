@@ -9,6 +9,8 @@ public enum SecretAccount {
     public static func hostPassword(_ id: UUID) -> String { "host.\(id.uuidString).password" }
     /// The API key for the Claude agent panel (Anthropic or an OpenAI-compatible endpoint).
     public static let agentAPIKey = "agent.apiKey"
+    /// The API key for the Caimex provider, kept apart so it can sit beside an Anthropic key.
+    public static let caimexAPIKey = "agent.caimex.apiKey"
     /// Password for the proxy configured on a host or group (`ownerID` is the host's or group's UUID).
     public static func proxyPassword(_ ownerID: UUID) -> String { "proxy.\(ownerID.uuidString).password" }
     /// Cloud provider credentials, keyed by provider id (`aws`, `digitalocean`, `azure`).

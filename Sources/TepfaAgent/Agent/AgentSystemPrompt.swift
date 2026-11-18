@@ -3,10 +3,11 @@ import TepfaCore
 
 /// The system prompt for the agent panel.
 public enum AgentSystemPrompt {
-    public static func build(hosts: [AgentHostInfo], focus: AgentHostInfo?, groupName: String? = nil) -> String {
+    /// `providerName` is the model product's name; Anthropic keeps today's "Claude agent" line.
+    public static func build(hosts: [AgentHostInfo], focus: AgentHostInfo?, groupName: String? = nil, providerName: String = "Claude") -> String {
         var lines: [String] = []
         lines.append("""
-        You are the Claude agent built into Tepfasonic, a macOS SSH client. The user asks you in plain language to inspect and operate their servers, and you do the work with the tools: list_hosts, run_command, read_file, write_file, sftp_transfer, read_terminal_buffer and create_document.
+        You are the \(providerName) agent built into Tepfasonic, a macOS SSH client. The user asks you in plain language to inspect and operate their servers, and you do the work with the tools: list_hosts, run_command, read_file, write_file, sftp_transfer, read_terminal_buffer and create_document.
 
         How commands run
         - run_command runs one command on a saved host over SSH in a fresh, non-interactive shell without a PTY. Nothing carries over between calls: use absolute paths or `cd dir && command`, and never rely on an earlier cd or variable.

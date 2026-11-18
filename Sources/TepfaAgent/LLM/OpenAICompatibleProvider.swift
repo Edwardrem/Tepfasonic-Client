@@ -7,15 +7,18 @@ public struct OpenAICompatibleProvider: LLMProvider {
     public var apiKey: String
     public var model: String
     public var session: URLSession
+    /// A product name for the panel; nil shows the host, which suits a user-typed endpoint.
+    public var name: String?
 
-    public init(baseURL: URL, apiKey: String, model: String, session: URLSession = .shared) {
+    public init(baseURL: URL, apiKey: String, model: String, session: URLSession = .shared, name: String? = nil) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.model = model
         self.session = session
+        self.name = name
     }
 
-    public var displayName: String { baseURL.host ?? "endpoint" }
+    public var displayName: String { name ?? baseURL.host ?? "endpoint" }
     public var modelName: String { model }
 
     public func requestBody(_ request: LLMRequest) -> JSONValue {
@@ -111,7 +114,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
         }
     }
 
-    private func run(_ request: LLMRequest, continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation) async throws {
+    /// The exact request the provider sends; kept separate so tests can check it without a network.
+    func urlRequest(for request: LLMRequest) -> URLRequest {
         var urlRequest = URLRequest(url: baseURL.appending(path: "chat/completions"))
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -119,13 +123,18 @@ public struct OpenAICompatibleProvider: LLMProvider {
         if !apiKey.isEmpty { urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
         urlRequest.httpBody = requestBody(request).data()
         urlRequest.timeoutInterval = 600
+        return urlRequest
+    }
+
+    private func run(_ request: LLMRequest, continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation) async throws {
+        let urlRequest = urlRequest(for: request)
 
         let (bytes, response) = try await session.bytes(for: urlRequest)
         guard let http = response as? HTTPURLResponse else { throw LLMError.invalidResponse("not an HTTP response") }
         if http.statusCode != 200 {
             var body = Data()
             for try await byte in bytes { body.append(byte); if body.count > 64_000 { break } }
-            throw AnthropicProvider.error(status: http.statusCode, body: body)
+            throw LLMError.fromHTTP(status: http.statusCode, body: body)
         }
 
         var parser = SSEParser()
