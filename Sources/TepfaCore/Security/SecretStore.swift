@@ -98,8 +98,8 @@ public struct SecretStore: Sendable {
         (try? itemExists(account: account)) ?? false
     }
 
-    /// Whether the item starts with `prefix`, or false when there is no item. This is the only operation
-    /// that reads a secret: the value is compared here and never returned.
+    /// Whether the item starts with `prefix`, or false when there is no item. The value is read here,
+    /// compared and never returned, so a caller learns one fact about the secret and not the secret.
     public func itemHasPrefix(account: String, prefix: String) throws -> Bool {
         guard let value = try string(account: account) else { return false }
         return value.hasPrefix(prefix)
