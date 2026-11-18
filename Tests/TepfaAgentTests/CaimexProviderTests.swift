@@ -147,6 +147,7 @@ struct CaimexProviderTests {
         #expect(LLMProviderConfiguration.Kind.caimex.displayName == "Caimex")
         #expect(LLMProviderConfiguration.Kind.caimex.agentName == "Caimex")
         #expect(LLMProviderConfiguration.Kind.anthropic.agentName == "Claude")
+        #expect(LLMProviderConfiguration.Kind.openAICompatible.agentName == "AI")
         #expect(LLMProviderConfiguration.defaultModel(for: .caimex) == "deepseek-v4-flash")
         #expect(LLMProviderConfiguration.defaultModel(for: .anthropic) == "claude-opus-5-5")
     }
@@ -158,6 +159,11 @@ struct CaimexProviderTests {
         let caimex = AgentSystemPrompt.build(hosts: [], focus: nil, providerName: LLMProviderConfiguration.Kind.caimex.agentName)
         #expect(caimex.hasPrefix("You are the Caimex agent built into Tepfasonic, a macOS SSH client."))
         #expect(!caimex.contains("Claude agent"))
+
+        let ai = AgentSystemPrompt.build(hosts: [], focus: nil, providerName: LLMProviderConfiguration.Kind.openAICompatible.agentName)
+        #expect(ai.hasPrefix("You are the AI agent built into Tepfasonic, a macOS SSH client."))
+        #expect(!ai.contains("Claude agent"))
+
         #expect(claude.contains("Claude agent"))
     }
 }

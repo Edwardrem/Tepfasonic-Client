@@ -119,6 +119,45 @@ struct CaimexModelCatalogueTests {
         }
     }
 
+    @Test func transportErrorReachesTheCallerUnchanged() async {
+        StubURLProtocol.install(.init(error: URLError(.notConnectedToInternet)))
+        do {
+            _ = try await CaimexModelCatalogue(session: Self.session()).models()
+            Issue.record("an offline Mac should throw")
+        } catch {
+            #expect((error as? URLError)?.code == .notConnectedToInternet)
+            #expect(!(error is LLMError), "transport errors keep their type for the view")
+        }
+    }
+
+    @Test func cancellationIsNotTurnedIntoAnLLMError() async {
+        StubURLProtocol.install(.init(error: URLError(.cancelled)))
+        do {
+            _ = try await CaimexModelCatalogue(session: Self.session()).models()
+            Issue.record("a cancelled load should throw")
+        } catch {
+            #expect((error as? URLError)?.code == .cancelled)
+            #expect(!(error is LLMError), "cancellation is not a gateway error")
+        }
+    }
+
+    @Test func oversizedErrorPageStillReportsTheStatus() async {
+        StubURLProtocol.install(.init(status: 500, body: Data(repeating: 0x78, count: 100_000)))
+        do {
+            _ = try await CaimexModelCatalogue(session: Self.session()).models()
+            Issue.record("a 500 should throw")
+        } catch let error as LLMError {
+            guard case .httpStatus(let status, let body) = error else {
+                Issue.record("expected httpStatus, got \(error)")
+                return
+            }
+            #expect(status == 500)
+            #expect(body == String(repeating: "x", count: 300), "only the bounded body head is quoted")
+        } catch {
+            Issue.record("expected LLMError, got \(error)")
+        }
+    }
+
     @Test func unreadableBodyIsAnInvalidResponse() async {
         StubURLProtocol.install(.init(body: Data("not json".utf8)))
         do {

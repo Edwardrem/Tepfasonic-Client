@@ -39,19 +39,14 @@ public struct CaimexModelCatalogue: Sendable {
         }
         request.timeoutInterval = Self.timeout
 
-        let bytes: URLSession.AsyncBytes
-        let response: URLResponse
-        do {
-            (bytes, response) = try await session.bytes(for: request)
-        } catch {
-            throw LLMError.invalidResponse("The model list could not be loaded. \(error.localizedDescription)")
-        }
+        // Transport errors and cancellation keep their own type; the view decides whether to show them.
+        let (bytes, response) = try await session.bytes(for: request)
 
         guard let http = response as? HTTPURLResponse else {
             throw LLMError.invalidResponse("not an HTTP response")
         }
         guard http.statusCode == 200 else {
-            let body = try await Self.readBody(from: bytes, limit: 64_000, overflow: "The gateway's error response is too large.")
+            let body = await Self.readAtMost(from: bytes, limit: 64_000)
             throw LLMError.fromHTTP(status: http.statusCode, body: body)
         }
 
@@ -74,6 +69,20 @@ public struct CaimexModelCatalogue: Sendable {
         for try await byte in bytes {
             if body.count >= limit { throw LLMError.invalidResponse(overflow) }
             body.append(byte)
+        }
+        return body
+    }
+
+    /// Reads at most `limit` bytes and stops, so an oversized error page keeps its status.
+    private static func readAtMost(from bytes: URLSession.AsyncBytes, limit: Int) async -> Data {
+        var body = Data()
+        do {
+            for try await byte in bytes {
+                body.append(byte)
+                if body.count >= limit { break }
+            }
+        } catch {
+            // A broken error body still leaves the status to report.
         }
         return body
     }

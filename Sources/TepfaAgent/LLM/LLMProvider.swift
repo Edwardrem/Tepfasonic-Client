@@ -112,7 +112,7 @@ public struct LLMProviderConfiguration: Codable, Sendable, Equatable {
             switch self {
             case .anthropic: "Claude"
             case .caimex: "Caimex"
-            case .openAICompatible: "OpenAI-compatible"
+            case .openAICompatible: "AI"
             }
         }
     }
