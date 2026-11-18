@@ -58,7 +58,7 @@
     <div class="card"><h3>Everything on your Mac</h3><p>Hosts in a local database, secrets in the Keychain behind Touch ID. Nothing leaves the machine except the SSH connections you make.</p></div>
     <div class="card"><h3>Terminal you'd expect</h3><p>Tabs, nested splits, true colour, 100 000 lines of scrollback, auto-reconnect after sleep, restored on relaunch.</p></div>
     <div class="card"><h3>Move between Macs</h3><p>One encrypted <code>.tepfa</code> file carries hosts, keys, snippets and themes. Import from <code>~/.ssh/config</code>, Termius, PuTTY and Tabby.</p></div>
-    <div class="card"><h3>Claude on your servers</h3><p>Bring your own API key, or connect Claude Desktop and Claude Code over MCP. Every command passes your per-host guardrails and lands in an audit log.</p></div>
+    <div class="card"><h3>Claude on your servers</h3><p>Bring your own Anthropic or Caimex API key, or connect Claude Desktop and Claude Code over MCP. Every command passes your per-host guardrails and lands in an audit log.</p></div>
   </section>
 
   <section id="screenshots">
@@ -107,6 +107,12 @@
   </section>
 
   <section>
+    <h2>New in 0.3.9</h2>
+    <ul>
+      <li>Caimex in the chat: choose Caimex as the provider in Settings → Claude, save a Caimex key and pick a model from the gateway's list. The tools, the per-host approvals and the audit log work as they do with Claude.</li>
+      <li>One saved key per provider: Anthropic, Caimex and an OpenAI-compatible endpoint each keep their own key in the Keychain, and a key is sent only to its own provider. A key you saved before stays where it belongs: an Anthropic key with Claude, any other key with the provider that was selected.</li>
+      <li>Each provider remembers its own model, and a model that is not Claude is no longer told it is Claude.</li>
+    </ul>
     <h2>New in 0.3.8</h2>
     <ul>
       <li>Fixed: a Claude conversation could get stuck on the error "<code>tool_use</code> ids were found without <code>tool_result</code> blocks" after a reply was cut off or interrupted during a tool call. Such calls are now answered automatically, and conversations saved in that state are repaired when you open them.</li>
