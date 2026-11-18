@@ -69,8 +69,14 @@ public struct CaimexModelCatalogue: Sendable {
             throw LLMError.invalidResponse("The model list could not be read.")
         }
         return list.data
-            .filter { !$0.id.isEmpty && ($0.capabilities?.contains("chat") ?? false) && $0.locked != true }
-            .map { CaimexModel(id: $0.id, featured: $0.featured == true) }
+            .compactMap(\.entry)
+            .filter { entry in
+                guard !entry.id.isEmpty, !entry.locked else { return false }
+                // Known capabilities must include chat; unknown (absent or null) keeps the model.
+                guard let capabilities = entry.capabilities else { return true }
+                return capabilities.contains("chat")
+            }
+            .map { CaimexModel(id: $0.id, featured: $0.featured) }
             .sorted { lhs, rhs in
                 guard lhs.featured == rhs.featured else { return lhs.featured }
                 return lhs.id < rhs.id
@@ -102,14 +108,42 @@ public struct CaimexModelCatalogue: Sendable {
     }
 
     private struct ModelList: Decodable {
-        let data: [Entry]
+        let data: [LossyEntry]
     }
 
-    /// Only the fields the picker needs; unknown keys and `null` values are fine.
+    /// One array element. An entry that cannot be read is skipped instead of failing the whole list.
+    private struct LossyEntry: Decodable {
+        let entry: Entry?
+
+        init(from decoder: any Decoder) throws {
+            entry = try? Entry(from: decoder)
+        }
+    }
+
+    /// Only the fields the picker needs; unknown keys and `null` values are fine. A `featured` or `locked`
+    /// that is not a Bool counts as false; absent or null capabilities mean "unknown", not "no chat".
     private struct Entry: Decodable {
         let id: String
-        let featured: Bool?
-        let locked: Bool?
+        let featured: Bool
+        let locked: Bool
         let capabilities: [String]?
+
+        private enum CodingKeys: String, CodingKey {
+            case id, featured, locked, capabilities
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            featured = (try? container.decode(Bool.self, forKey: .featured)) ?? false
+            locked = (try? container.decode(Bool.self, forKey: .locked)) ?? false
+            if container.contains(.capabilities) {
+                let isNull = (try? container.decodeNil(forKey: .capabilities)) ?? false
+                // Absent or null is unknown; a present value that is not a string array cannot support chat.
+                capabilities = isNull ? nil : ((try? container.decode([String].self, forKey: .capabilities)) ?? [])
+            } else {
+                capabilities = nil
+            }
+        }
     }
 }

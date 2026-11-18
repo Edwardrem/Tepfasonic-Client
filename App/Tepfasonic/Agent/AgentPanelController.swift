@@ -44,6 +44,8 @@ final class AgentPanelController {
     private var providerConfiguration: LLMProviderConfiguration?
     /// The selected kind's key version when the current provider was built.
     private var providerKeyVersion = 0
+    /// The kind of the provider actually built for this session, for the status badge. nil until built.
+    private(set) var providerKind: LLMProviderConfiguration.Kind?
 
     /// Copies of attached files live here, one folder per attachment.
     static var attachmentsDirectory: URL {
@@ -272,14 +274,17 @@ final class AgentPanelController {
         setupError = nil
         Task {
             do {
-                if providerConfiguration != settings.configuration
-                    || providerKeyVersion != settings.keyVersion
+                // One snapshot before any await: the prompt must not be able to retarget the key or host.
+                let plan = settings.providerPlan()
+                if providerConfiguration != plan.configuration
+                    || providerKeyVersion != plan.keyVersion
                     || session.provider is PlaceholderProvider {
-                    session.provider = try await settings.makeProvider()
-                    providerConfiguration = settings.configuration
-                    providerKeyVersion = settings.keyVersion
+                    session.provider = try await settings.makeProvider(for: plan)
+                    providerConfiguration = plan.configuration
+                    providerKeyVersion = plan.keyVersion
+                    providerKind = plan.configuration.kind
                 }
-                session.systemPrompt = systemPrompt()
+                session.systemPrompt = systemPrompt(providerName: plan.configuration.kind.agentName)
                 if let edited, editing?.id == edited.id {
                     // The rewritten message takes the place of the original and of
                     // every reply that followed it. Files taken off the edit go with it.
@@ -303,14 +308,15 @@ final class AgentPanelController {
 
     private func makeSession(messages: [AgentMessage]) -> AgentSession {
         let runner = AgentToolRunner(host: toolHost, source: .agentPanel, conversationID: conversation?.uuid)
-        let session = AgentSession(provider: PlaceholderProvider(), systemPrompt: systemPrompt(), toolRunner: runner, messages: messages)
+        // A fresh session starts with the placeholder; the next send builds and records the real provider.
+        providerKind = nil
+        let session = AgentSession(provider: PlaceholderProvider(), systemPrompt: systemPrompt(providerName: settings.configuration.kind.agentName), toolRunner: runner, messages: messages)
         session.transcriptDidChange = { [weak self] in self?.persist() }
         return session
     }
 
-    private func systemPrompt() -> String {
+    private func systemPrompt(providerName: String) -> String {
         let infos = toolHost.hosts()
-        let providerName = settings.configuration.kind.agentName
         switch scope {
         case .all:
             return AgentSystemPrompt.build(hosts: infos, focus: nil, providerName: providerName)

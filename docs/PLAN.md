@@ -6,7 +6,7 @@ _Nov 3, 2026 · Rufaro Mutepfa_
 
 | Step | Area | State |
 |---|---|---|
-| — | Unreleased: Caimex provider | **Done** (Nov 18, 2026) — Caimex in the Provider picker with a model list from the gateway, its own Keychain key; each provider keeps its own key, and a 0.3.8 key stays with the provider that was selected |
+| — | Unreleased: Caimex provider | **Done** (Nov 18, 2026) — Caimex in the Provider picker with a model list from the gateway, its own Keychain key; each provider keeps its own key; after upgrading from 0.3.8 an Anthropic key stays with Claude while any other saved key stays with the provider that was selected |
 | 1 | SSH transport (SwiftNIO SSH) + SwiftTerm terminal + host list | **Done** (Nov 3, 2026) — see README for scope and known gaps |
 | 2 | Tabs and split panes | **Done** (Nov 3, 2026) |
 | 3 | GitHub Actions CI, GitHub Pages site, Sparkle updater | **Done** (Nov 3, 2026) — needs the Sparkle key and Developer ID secrets before a real release |

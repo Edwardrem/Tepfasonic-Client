@@ -72,6 +72,16 @@ struct SecretStoreTests {
         #expect(try store.accounts().isEmpty)
     }
 
+    @Test func itemHasPrefixReportsThePrefixWithoutReturningTheSecret() throws {
+        let store = SecretStore(service: "com.tepfasonic.tests.\(UUID().uuidString)")
+        defer { try? store.deleteAll() }
+
+        #expect(try store.itemHasPrefix(account: "missing", prefix: "sk-ant-") == false)
+        try store.set("sk-ant-test-key", account: "a")
+        #expect(try store.itemHasPrefix(account: "a", prefix: "sk-ant-"))
+        #expect(try !store.itemHasPrefix(account: "a", prefix: "sk-proj-"))
+    }
+
     private func label(of account: String, in store: SecretStore) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

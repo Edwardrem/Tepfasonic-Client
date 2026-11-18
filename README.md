@@ -93,11 +93,12 @@ conversations. Your real hosts never leave your Mac.
   pipeline 16 requests of 32 KiB and resume from where they stopped.
 - **Claude agent panel** (⌘⇧A): bring your own Anthropic or Caimex API key, kept
   apart in the Keychain, or point the panel at any OpenAI-compatible endpoint.
-  Each provider keeps its own key: after upgrading from 0.3.8 the saved key stays
-  with the provider that was selected, and the other asks for its own. With
-  Caimex you pick a model from the gateway's list (the agent needs one with tool
-  calling). Dictate a message with the microphone button: speech is transcribed
-  on your Mac (nothing leaves it) and lands in the composer to edit and send.
+  Each provider keeps its own key: after upgrading from 0.3.8 an Anthropic key
+  stays with Claude, and any other saved key stays with the provider that was
+  selected. With Caimex you pick a model from the gateway's list (the agent
+  needs one with tool calling). Dictate a message with the microphone button:
+  speech is transcribed on your Mac (nothing leaves it) and lands in the
+  composer to edit and send.
   Attach files or a whole folder to a message with the paperclip or by dropping
   them on the panel: images, PDFs, Word documents (sent as their text) and text
   files such as logs, configs, code and CSV go to the model with your question.

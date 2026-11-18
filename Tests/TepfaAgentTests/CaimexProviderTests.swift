@@ -168,4 +168,19 @@ struct CaimexProviderTests {
 
         #expect(claude.contains("Claude agent"))
     }
+
+    @Test func anEmptyModelFallsBackToTheKindDefault() {
+        var configuration = LLMProviderConfiguration(kind: .caimex)
+        configuration.model = ""
+        #expect(configuration.model == LLMProviderConfiguration.defaultCaimexModel)
+
+        configuration.model = "   "
+        #expect(configuration.model == LLMProviderConfiguration.defaultCaimexModel)
+
+        configuration.model = "ollama/qwen3-vl:8b"
+        #expect(configuration.model == "ollama/qwen3-vl:8b")
+
+        configuration.model = " spaced/id "
+        #expect(configuration.model == " spaced/id ", "a real id is returned exactly as stored")
+    }
 }

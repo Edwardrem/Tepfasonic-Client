@@ -98,6 +98,13 @@ public struct SecretStore: Sendable {
         (try? itemExists(account: account)) ?? false
     }
 
+    /// Whether the item starts with `prefix`, or false when there is no item. This is the only operation
+    /// that reads a secret: the value is compared here and never returned.
+    public func itemHasPrefix(account: String, prefix: String) throws -> Bool {
+        guard let value = try string(account: account) else { return false }
+        return value.hasPrefix(prefix)
+    }
+
     /// Moves the item to another account without reading its data: one update of the account attribute and
     /// the label. Throws (and changes nothing) when the source is missing or the destination already has an
     /// item, so a move can never overwrite a key.

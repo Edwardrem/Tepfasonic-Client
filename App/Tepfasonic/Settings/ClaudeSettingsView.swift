@@ -16,6 +16,8 @@ struct ClaudeSettingsView: View {
     @State private var caimexLoading = false
     @State private var caimexError: String?
     @State private var caimexTypingCustom = false
+    /// Each load gets a generation; only the latest may write the list, the error or the spinner.
+    @State private var caimexLoadGeneration = 0
 
     private static let customModelTag = "custom"
 
@@ -23,22 +25,6 @@ struct ClaudeSettingsView: View {
 
     private var configuration: Binding<LLMProviderConfiguration> {
         Binding(get: { settings.configuration }, set: { settings.configuration = $0 })
-    }
-
-    /// Changing provider clears the typed key and its status here, so a key typed for one provider can
-    /// never be saved to another.
-    private var kindBinding: Binding<LLMProviderConfiguration.Kind> {
-        Binding(
-            get: { settings.configuration.kind },
-            set: { newKind in
-                guard newKind != settings.configuration.kind else { return }
-                apiKeyDraft = ""
-                keyMessage = nil
-                caimexTypingCustom = false
-                caimexError = nil
-                settings.configuration.kind = newKind
-            }
-        )
     }
 
     private var usesCustomModel: Bool {
@@ -71,7 +57,7 @@ struct ClaudeSettingsView: View {
         @Bindable var mcp = mcp
         Form {
             Section("Model") {
-                Picker("Provider", selection: kindBinding) {
+                Picker("Provider", selection: configuration.kind) {
                     ForEach(LLMProviderConfiguration.Kind.allCases, id: \.self) { kind in
                         Text(kind.displayName).tag(kind)
                     }
@@ -178,8 +164,12 @@ struct ClaudeSettingsView: View {
             await loadCaimexModels()
         }
         .onChange(of: settings.configuration.kind) { _, _ in
+            // One reset for every kind change, however it happens: a key typed for one provider must never
+            // be saved to another, and the status and Caimex field state belong to the old provider.
             apiKeyDraft = ""
             keyMessage = nil
+            caimexTypingCustom = false
+            caimexError = nil
         }
     }
 
@@ -222,18 +212,28 @@ struct ClaudeSettingsView: View {
     }
 
     private func loadCaimexModels() async {
+        caimexLoadGeneration += 1
+        let generation = caimexLoadGeneration
         caimexLoading = true
         caimexError = nil
         do {
             // No key: the model list is public and must not unlock the vault or prompt for Touch ID.
-            caimexModels = try await CaimexModelCatalogue().models()
+            let models = try await CaimexModelCatalogue().models()
+            guard generation == caimexLoadGeneration else { return }
+            caimexModels = models
         } catch is CancellationError {
             // The provider changed or the screen closed; a cancelled load is not an error.
+            guard generation == caimexLoadGeneration else { return }
         } catch let error as URLError where error.code == .cancelled {
             // Same as above: URLSession reports cancellation as an error.
+            guard generation == caimexLoadGeneration else { return }
         } catch {
+            // A stale load must not overwrite a newer one's result or spinner.
+            guard generation == caimexLoadGeneration else { return }
             caimexError = error.localizedDescription
         }
+        // Only the latest load clears the spinner; a cancelled older one leaves it to its successor.
+        guard generation == caimexLoadGeneration else { return }
         caimexLoading = false
     }
 

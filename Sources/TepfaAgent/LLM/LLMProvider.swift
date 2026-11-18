@@ -158,9 +158,16 @@ public struct LLMProviderConfiguration: Codable, Sendable, Equatable {
         }
     }
 
-    /// The model of the current kind; setting it leaves the other kinds alone.
+    /// The model of the current kind; setting it leaves the other kinds alone. An empty or whitespace
+    /// value (a cleared "Other…" field) answers the kind's default; a real id is returned exactly as stored.
     public var model: String {
-        get { models[kind] ?? Self.defaultModel(for: kind) }
+        get {
+            guard let stored = models[kind],
+                  !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return Self.defaultModel(for: kind)
+            }
+            return stored
+        }
         set { models[kind] = newValue }
     }
 

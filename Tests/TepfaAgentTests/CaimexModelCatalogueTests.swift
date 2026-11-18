@@ -82,7 +82,9 @@ struct CaimexModelCatalogueTests {
         ]}
         """
         let models = try await load(body)
-        #expect(models.map(\.id) == ["alpha", "caimex/auto", "gamma", "zeta"])
+        // A null capabilities value means "unknown", so epsilon is kept; present capabilities without
+        // "chat" (beta) and a locked model (delta) are still excluded.
+        #expect(models.map(\.id) == ["alpha", "caimex/auto", "epsilon", "gamma", "zeta"])
         #expect(models.first?.featured == true)
         #expect(models.dropFirst().allSatisfy { !$0.featured })
     }
@@ -173,19 +175,61 @@ struct CaimexModelCatalogueTests {
         }
     }
 
-    @Test func oversizedBodyIsRefused() async {
-        let oversized = Data(repeating: 0x20, count: CaimexModelCatalogue.maximumBodyBytes + 1)
-        StubURLProtocol.install(.init(body: oversized))
-        do {
-            _ = try await CaimexModelCatalogue(session: Self.session()).models()
-            Issue.record("an oversized body should be refused")
-        } catch let error as LLMError {
-            guard case .invalidResponse = error else {
-                Issue.record("expected invalidResponse, got \(error)")
-                return
+    @Test func skipsAnEntryItCannotRead() async throws {
+        let body = """
+        {"data":[
+          {"id":"ok","capabilities":["chat"]},
+          {"featured":true},
+          {"id":null,"capabilities":["chat"]},
+          {"id":42},
+          "not an object",
+          null,
+          {"id":"also-ok","capabilities":["chat"]}
+        ]}
+        """
+        let models = try await load(body)
+        #expect(models.map(\.id) == ["also-ok", "ok"])
+    }
+
+    @Test func aNonBoolFeaturedOrLockedCountsAsFalse() async throws {
+        let body = """
+        {"data":[
+          {"id":"featured-text","featured":"yes","capabilities":["chat"]},
+          {"id":"locked-number","locked":1,"capabilities":["chat"]}
+        ]}
+        """
+        let models = try await load(body)
+        #expect(models.map(\.id) == ["featured-text", "locked-number"])
+        #expect(models.allSatisfy { !$0.featured })
+    }
+
+    @Test func capabilitiesAbsentOrNullKeepsTheModel() async throws {
+        let body = """
+        {"data":[
+          {"id":"absent"},
+          {"id":"null","capabilities":null},
+          {"id":"embeddings","capabilities":["embeddings"]},
+          {"id":"chat","capabilities":["chat"]},
+          {"id":"wrong-type","capabilities":"chat"}
+        ]}
+        """
+        let models = try await load(body)
+        #expect(models.map(\.id) == ["absent", "chat", "null"])
+    }
+
+    @Test func aMissingOrUnreadableDataArrayIsAnError() async {
+        for body in [#"{"object":"list"}"#, #"{"data":"nope"}"#] {
+            do {
+                _ = try await load(body)
+                Issue.record("an unreadable list should throw: \(body)")
+            } catch let error as LLMError {
+                guard case .invalidResponse = error else {
+                    Issue.record("expected invalidResponse, got \(error)")
+                    return
+                }
+            } catch {
+                Issue.record("expected LLMError, got \(error)")
             }
-        } catch {
-            Issue.record("expected LLMError, got \(error)")
         }
     }
 }

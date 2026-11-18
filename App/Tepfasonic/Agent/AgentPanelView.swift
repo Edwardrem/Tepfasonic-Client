@@ -233,7 +233,7 @@ struct AgentPanelView: View {
                 ProgressView().controlSize(.small)
                 Text(session.activeTool.map { "Running \($0)…" } ?? (session.streamingThinking.isEmpty ? "Thinking…" : "Reasoning…"))
             } else if let session, let model = session.lastModel {
-                providerBadge
+                providerBadge(for: controller.providerKind)
                 Text(model)
                 if session.servedByFallback {
                     Text("fallback").padding(.horizontal, 5).background(.orange.opacity(0.25), in: Capsule())
@@ -242,7 +242,7 @@ struct AgentPanelView: View {
                     Text("\(session.usage.inputTokens.formatted()) in · \(session.usage.outputTokens.formatted()) out")
                 }
             } else {
-                providerBadge
+                providerBadge(for: AgentSettings.shared.configuration.kind)
                 Text(AgentSettings.shared.configuration.model)
             }
             Spacer()
@@ -258,10 +258,11 @@ struct AgentPanelView: View {
         .padding(.top, 7)
     }
 
-    /// Says who is answering when it is not Anthropic, so a Caimex model is not mistaken for Claude.
+    /// Says who answered. Beside a reply it is the provider the controller built for this session, so
+    /// switching the picker afterwards cannot relabel an old answer. No badge when that is unknown.
     @ViewBuilder
-    private var providerBadge: some View {
-        if AgentSettings.shared.configuration.kind == .caimex {
+    private func providerBadge(for kind: LLMProviderConfiguration.Kind?) -> some View {
+        if kind == .caimex {
             Text("Caimex")
                 .padding(.horizontal, 5)
                 .background(Design.Tint.conversation.opacity(0.22), in: Capsule())

@@ -13,8 +13,11 @@ struct APIKeyMigrationTests {
         var failNextMove = false
         /// Makes the next existence check fail, as a locked or busy Keychain would.
         var failNextExists = false
+        /// Makes the next prefix check fail, as a locked or busy Keychain would.
+        var failNextPrefix = false
         private(set) var moves = 0
         private(set) var deletions: [String] = []
+        private(set) var prefixChecks = 0
 
         func itemExists(account: String) throws -> Bool {
             if failNextExists {
@@ -22,6 +25,15 @@ struct APIKeyMigrationTests {
                 throw FakeError.existsFailed
             }
             return items[account] != nil
+        }
+
+        func itemHasPrefix(account: String, prefix: String) throws -> Bool {
+            prefixChecks += 1
+            if failNextPrefix {
+                failNextPrefix = false
+                throw FakeError.prefixFailed
+            }
+            return items[account]?.hasPrefix(prefix) ?? false
         }
 
         func move(from source: String, to destination: String, label: String) throws {
@@ -46,6 +58,7 @@ struct APIKeyMigrationTests {
     private enum FakeError: Error {
         case moveFailed
         case existsFailed
+        case prefixFailed
     }
 
     /// Every test gets its own defaults suite and removes it, so no decision leaks into the next run.
@@ -73,6 +86,7 @@ struct APIKeyMigrationTests {
             #expect(recordedState(defaults) == "settled")
             #expect(store.moves == 0)
             #expect(store.deletions.isEmpty)
+            #expect(store.prefixChecks == 0, "a fresh install reads no item")
         }
     }
 
@@ -229,6 +243,101 @@ struct APIKeyMigrationTests {
         }
     }
 
+    // MARK: An Anthropic key stays with Anthropic (rule 3, new)
+
+    @Test func aFirstDecisionLeavesAnAnthropicKeyWhereItIs() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            store.items[legacyAccount] = "sk-ant-test-key"
+            let migration = APIKeyMigration(store: store, defaults: defaults)
+
+            migration.run(legacyKind: .openAICompatible)
+
+            #expect(recordedState(defaults) == "settled")
+            #expect(store.items[legacyAccount] == "sk-ant-test-key")
+            #expect(store.items[endpointAccount] == nil)
+            #expect(store.moves == 0)
+            #expect(store.deletions.isEmpty)
+            #expect(migration.account(for: .anthropic) == legacyAccount)
+        }
+    }
+
+    @Test func aPendingMoveLeavesAnAnthropicKeyWhereItIs() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            // An earlier launch could not read the store, so the move was left pending.
+            store.items[legacyAccount] = "endpoint-test-key"
+            store.failNextExists = true
+            let migration = APIKeyMigration(store: store, defaults: defaults)
+            migration.run(legacyKind: .openAICompatible)
+            #expect(recordedState(defaults) == "pendingMove")
+
+            // The item turns out to be an Anthropic key: it must stay with Claude.
+            store.items[legacyAccount] = "sk-ant-test-key"
+            migration.run(legacyKind: .openAICompatible)
+
+            #expect(recordedState(defaults) == "settled")
+            #expect(store.items[legacyAccount] == "sk-ant-test-key")
+            #expect(store.items[endpointAccount] == nil)
+            #expect(store.moves == 0)
+            #expect(migration.account(for: .anthropic) == legacyAccount)
+        }
+    }
+
+    @Test func aPendingMoveDoesNotDeleteAnAnthropicKeyWhenTheEndpointAccountIsFilled() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            store.items[legacyAccount] = "endpoint-test-key"
+            store.failNextMove = true
+            let migration = APIKeyMigration(store: store, defaults: defaults)
+            migration.run(legacyKind: .openAICompatible)
+            #expect(recordedState(defaults) == "pendingMove")
+
+            // The old item is an Anthropic key and the user has since saved an endpoint key.
+            store.items[legacyAccount] = "sk-ant-test-key"
+            store.items[endpointAccount] = "new-endpoint-test-key"
+            migration.run(legacyKind: .openAICompatible)
+
+            #expect(recordedState(defaults) == "settled")
+            #expect(store.items[legacyAccount] == "sk-ant-test-key")
+            #expect(store.items[endpointAccount] == "new-endpoint-test-key")
+            #expect(store.deletions.isEmpty)
+            #expect(migration.account(for: .anthropic) == legacyAccount)
+        }
+    }
+
+    @Test func aFailingPrefixCheckStaysPendingAndTouchesNothing() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            store.items[legacyAccount] = "endpoint-test-key"
+            store.failNextMove = true
+            let migration = APIKeyMigration(store: store, defaults: defaults)
+            migration.run(legacyKind: .openAICompatible)
+            #expect(recordedState(defaults) == "pendingMove")
+
+            store.failNextPrefix = true
+            migration.run(legacyKind: .openAICompatible)
+
+            #expect(recordedState(defaults) == "pendingMove")
+            #expect(store.items[legacyAccount] == "endpoint-test-key")
+            #expect(store.items[endpointAccount] == nil)
+            #expect(store.moves == 1)
+            #expect(store.deletions.isEmpty)
+            #expect(migration.account(for: .anthropic) == nil)
+        }
+    }
+
+    @Test func theAnthropicDecisionNeverReadsTheItem() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            store.items[legacyAccount] = "anthropic-test-key"
+            APIKeyMigration(store: store, defaults: defaults).run(legacyKind: .anthropic)
+
+            #expect(store.prefixChecks == 0)
+            #expect(store.items[legacyAccount] == "anthropic-test-key")
+        }
+    }
+
     // MARK: Rule 5: a new endpoint key supersedes the old one
 
     @Test func anEndpointKeySavedFirstSupersedesTheOldOne() {
@@ -253,18 +362,20 @@ struct APIKeyMigrationTests {
         }
     }
 
-    // MARK: Rule 6: the store has no read, so no secret can be seen
+    // MARK: The one read returns only a Bool
 
-    @Test func aMoveNeverAsksTheStoreForASecret() {
-        // `APIKeyStore` exposes only exists/move/delete, so the migration has no way to read, copy or log
-        // the value; the fake can only report that it was asked to rename it.
+    @Test func thePrefixCheckNeverReturnsOrStoresTheSecret() {
+        // `itemHasPrefix` compares the value inside the store and answers only true/false, so the
+        // migration can tell an Anthropic key from an endpoint key without holding either one.
         withDefaults { defaults in
             let store = FakeKeyStore()
-            store.items[legacyAccount] = "endpoint-test-key"
+            store.items[legacyAccount] = "sk-ant-test-key"
             APIKeyMigration(store: store, defaults: defaults).run(legacyKind: .openAICompatible)
 
-            #expect(store.moves == 1)
-            #expect(store.deletions.isEmpty)
+            #expect(store.prefixChecks == 1)
+            #expect(store.items[legacyAccount] == "sk-ant-test-key")
+            #expect(store.items[endpointAccount] == nil)
+            #expect(store.moves == 0)
         }
     }
 

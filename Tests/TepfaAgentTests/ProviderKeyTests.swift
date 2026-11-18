@@ -20,6 +20,10 @@ struct ProviderKeyTests {
             return items[account] != nil
         }
 
+        func itemHasPrefix(account: String, prefix: String) throws -> Bool {
+            items[account]?.hasPrefix(prefix) ?? false
+        }
+
         func move(from source: String, to destination: String, label: String) throws {
             moves += 1
             if failMoves { throw FakeError.moveFailed }
@@ -111,9 +115,9 @@ struct ProviderKeyTests {
             let migration = APIKeyMigration(store: store, defaults: defaults)
             migration.run(legacyKind: .anthropic)
 
-            #expect(migration.accountForSaving(.anthropic, legacyKind: .anthropic) == anthropicAccount)
-            #expect(migration.accountForSaving(.caimex, legacyKind: .anthropic) == caimexAccount)
-            #expect(migration.accountForSaving(.openAICompatible, legacyKind: .anthropic) == endpointAccount)
+            #expect(migration.accountForSaving(.anthropic) == anthropicAccount)
+            #expect(migration.accountForSaving(.caimex) == caimexAccount)
+            #expect(migration.accountForSaving(.openAICompatible) == endpointAccount)
             #expect(store.moves == 0)
         }
     }
@@ -129,7 +133,7 @@ struct ProviderKeyTests {
 
             // The Keychain works again: saving retries the move, then may use Anthropic's account.
             store.failMoves = false
-            #expect(migration.accountForSaving(.anthropic, legacyKind: .openAICompatible) == anthropicAccount)
+            #expect(migration.accountForSaving(.anthropic) == anthropicAccount)
             #expect(store.items[endpointAccount] == "endpoint-test-key")
             #expect(store.items[anthropicAccount] == nil)
             #expect(store.labels[endpointAccount] == LLMProviderConfiguration.Kind.openAICompatible.keychainLabel)
@@ -145,7 +149,7 @@ struct ProviderKeyTests {
             migration.run(legacyKind: .openAICompatible)
 
             // Saving must write nothing rather than fall back to agent.apiKey.
-            #expect(migration.accountForSaving(.anthropic, legacyKind: .openAICompatible) == nil)
+            #expect(migration.accountForSaving(.anthropic) == nil)
             #expect(store.items[anthropicAccount] == "endpoint-test-key")
             #expect(store.items[endpointAccount] == nil)
         }
@@ -158,11 +162,63 @@ struct ProviderKeyTests {
             let migration = APIKeyMigration(store: store, defaults: defaults)
             migration.run(legacyKind: .anthropic)
 
-            // A later "legacy" endpoint kind must not move the Anthropic key on a save.
-            #expect(migration.accountForSaving(.anthropic, legacyKind: .openAICompatible) == anthropicAccount)
+            // A recorded decision is never retaken, so a save cannot move the Anthropic key.
+            #expect(migration.accountForSaving(.anthropic) == anthropicAccount)
             #expect(store.items[anthropicAccount] == "anthropic-test-key")
             #expect(store.items[endpointAccount] == nil)
             #expect(store.moves == 0)
+        }
+    }
+
+    // MARK: retryPendingMove
+
+    @Test func retryPendingMoveCompletesAnEndpointMove() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            store.items[anthropicAccount] = "endpoint-test-key"
+            store.failMoves = true
+            let migration = APIKeyMigration(store: store, defaults: defaults)
+            migration.run(legacyKind: .openAICompatible)
+            #expect(!migration.hasKey(for: .openAICompatible), "the endpoint has no key while the move is pending")
+
+            // A later attempt from the app, while the endpoint kind is selected, finishes the move.
+            store.failMoves = false
+            migration.retryPendingMove()
+
+            #expect(migration.hasKey(for: .openAICompatible))
+            #expect(store.items[endpointAccount] == "endpoint-test-key")
+            #expect(store.items[anthropicAccount] == nil)
+        }
+    }
+
+    @Test func retryPendingMoveDoesNothingWhenSettled() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            store.items[anthropicAccount] = "anthropic-test-key"
+            let migration = APIKeyMigration(store: store, defaults: defaults)
+            migration.run(legacyKind: .anthropic)
+
+            migration.retryPendingMove()
+
+            #expect(store.moves == 0)
+            #expect(store.items[anthropicAccount] == "anthropic-test-key")
+        }
+    }
+
+    @Test func retryPendingMoveStaysPendingWhenTheMoveFails() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            store.items[anthropicAccount] = "endpoint-test-key"
+            store.failMoves = true
+            let migration = APIKeyMigration(store: store, defaults: defaults)
+            migration.run(legacyKind: .openAICompatible)
+
+            migration.retryPendingMove()
+
+            #expect(migration.account(for: .anthropic) == nil)
+            #expect(!migration.hasKey(for: .openAICompatible))
+            #expect(store.items[anthropicAccount] == "endpoint-test-key")
+            #expect(store.items[endpointAccount] == nil)
         }
     }
 
