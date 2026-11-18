@@ -232,4 +232,20 @@ struct CaimexModelCatalogueTests {
             }
         }
     }
+
+    @Test func oversizedBodyIsRefused() async {
+        let oversized = Data(repeating: 0x20, count: CaimexModelCatalogue.maximumBodyBytes + 1)
+        StubURLProtocol.install(.init(body: oversized))
+        do {
+            _ = try await CaimexModelCatalogue(session: Self.session()).models()
+            Issue.record("an oversized body should be refused")
+        } catch let error as LLMError {
+            guard case .invalidResponse = error else {
+                Issue.record("expected invalidResponse, got \(error)")
+                return
+            }
+        } catch {
+            Issue.record("expected LLMError, got \(error)")
+        }
+    }
 }
