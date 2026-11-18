@@ -132,12 +132,14 @@ struct CaimexProviderTests {
         #expect(compatibleRequest.url?.host != caimexRequest.url?.host)
     }
 
-    @Test func keychainAccountsKeepTheOldKeyWhereItBelonged() {
+    @Test func eachKindHasItsOwnKeychainAccount() {
         #expect(LLMProviderConfiguration.Kind.anthropic.keychainAccount == SecretAccount.agentAPIKey)
-        #expect(LLMProviderConfiguration.Kind.openAICompatible.keychainAccount == SecretAccount.agentAPIKey)
+        #expect(LLMProviderConfiguration.Kind.openAICompatible.keychainAccount == SecretAccount.openAICompatibleAPIKey)
         #expect(LLMProviderConfiguration.Kind.caimex.keychainAccount == SecretAccount.caimexAPIKey)
-        #expect(SecretAccount.agentAPIKey == "agent.apiKey")
+        #expect(SecretAccount.agentAPIKey == "agent.apiKey", "0.3.8's account keeps its name and its Anthropic key")
+        #expect(SecretAccount.openAICompatibleAPIKey != SecretAccount.agentAPIKey)
         #expect(SecretAccount.caimexAPIKey != SecretAccount.agentAPIKey)
+        #expect(SecretAccount.caimexAPIKey != SecretAccount.openAICompatibleAPIKey)
     }
 
     // MARK: Names and the system prompt

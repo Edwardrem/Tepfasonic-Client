@@ -211,12 +211,13 @@ public struct LLMProviderConfiguration: Codable, Sendable, Equatable {
 }
 
 extension LLMProviderConfiguration.Kind {
-    /// The Keychain account holding this kind's key. Anthropic and OpenAI-compatible share the old account,
-    /// so an existing saved key keeps working.
+    /// The Keychain account holding this kind's key. Each kind has its own, so one provider's key is never
+    /// sent to another; `agent.apiKey` stays the Anthropic account and the one 0.3.8 wrote to.
     public var keychainAccount: String {
         switch self {
+        case .anthropic: SecretAccount.agentAPIKey
         case .caimex: SecretAccount.caimexAPIKey
-        case .anthropic, .openAICompatible: SecretAccount.agentAPIKey
+        case .openAICompatible: SecretAccount.openAICompatibleAPIKey
         }
     }
 }

@@ -3,12 +3,18 @@ import Security
 
 public enum SecretStoreError: Error, LocalizedError, Sendable, Equatable {
     case keychain(OSStatus)
+    case itemNotFound(String)
+    case destinationNotEmpty(String)
 
     public var errorDescription: String? {
         switch self {
         case .keychain(let status):
             let message = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
             return "Keychain error: \(message)"
+        case .itemNotFound(let account):
+            return "The Keychain has no item for \(account)."
+        case .destinationNotEmpty(let account):
+            return "The Keychain already has an item for \(account)."
         }
     }
 }
@@ -75,11 +81,42 @@ public struct SecretStore: Sendable {
         try data(account: account).flatMap { String(data: $0, encoding: .utf8) }
     }
 
-    public func exists(account: String) -> Bool {
+    /// Like `exists`, but reports a Keychain failure instead of treating it as "no item".
+    public func itemExists(account: String) throws -> Bool {
         var query = baseQuery(account: account)
         query[kSecReturnAttributes as String] = false
         query[kSecMatchLimit as String] = kSecMatchLimitOne
-        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
+        let status = SecItemCopyMatching(query as CFDictionary, nil)
+        switch status {
+        case errSecSuccess: return true
+        case errSecItemNotFound: return false
+        default: throw SecretStoreError.keychain(status)
+        }
+    }
+
+    public func exists(account: String) -> Bool {
+        (try? itemExists(account: account)) ?? false
+    }
+
+    /// Moves the item to another account without reading its data: one update of the account attribute and
+    /// the label. Throws (and changes nothing) when the source is missing or the destination already has an
+    /// item, so a move can never overwrite a key.
+    public func move(from source: String, to destination: String, label: String) throws {
+        if try itemExists(account: destination) {
+            throw SecretStoreError.destinationNotEmpty(destination)
+        }
+        let attributes: [String: Any] = [
+            kSecAttrAccount as String: destination,
+            kSecAttrLabel as String: label,
+        ]
+        let status = SecItemUpdate(baseQuery(account: source) as CFDictionary, attributes as CFDictionary)
+        switch status {
+        case errSecSuccess: return
+        case errSecItemNotFound: throw SecretStoreError.itemNotFound(source)
+        // Another writer filled the destination between the check and the update.
+        case errSecDuplicateItem: throw SecretStoreError.destinationNotEmpty(destination)
+        default: throw SecretStoreError.keychain(status)
+        }
     }
 
     /// Deleting a missing item is not an error.
