@@ -16,8 +16,6 @@ extension SecretStore: APIKeyStore {}
 public struct APIKeyMigration {
     /// One place for the recorded decision: `settled` or `pendingMove`.
     public static let defaultsKey = "agent.keyMigration"
-    /// What the endpoint key is called once it has its own account.
-    static let endpointLabel = "Tepfasonic endpoint API key"
 
     private enum State: String {
         case settled
@@ -42,8 +40,7 @@ public struct APIKeyMigration {
         case nil:
             // Only a typed endpoint owned the old key; Anthropic (and a fresh install) keeps it.
             if legacyKind == .openAICompatible {
-                record(.pendingMove)
-                finishPendingMove()
+                beginMove()
             } else {
                 record(.settled)
             }
@@ -65,6 +62,36 @@ public struct APIKeyMigration {
         defaults.set(state.rawValue, forKey: Self.defaultsKey)
     }
 
+    /// The first decision. 0.3.8 never wrote the endpoint account, so an item already there means this
+    /// version has run before: the old item is not provably an endpoint key, so settle without touching
+    /// either one. Deleting is only for a move an earlier launch left pending.
+    private func beginMove() {
+        // `agent.apiKey` is the Anthropic account and the one 0.3.8 wrote every key to.
+        let source = LLMProviderConfiguration.Kind.anthropic.keychainAccount
+        let destination = LLMProviderConfiguration.Kind.openAICompatible.keychainAccount
+        do {
+            if try store.itemExists(account: destination) {
+                record(.settled)
+                return
+            }
+            // Record before the move so an interrupted first launch retries instead of forgetting it.
+            record(.pendingMove)
+            guard try store.itemExists(account: source) else {
+                record(.settled)
+                return
+            }
+            try store.move(
+                from: source,
+                to: destination,
+                label: LLMProviderConfiguration.Kind.openAICompatible.keychainLabel
+            )
+            record(.settled)
+        } catch {
+            // Could not tell what is stored: keep the old item away from Anthropic until a later look.
+            record(.pendingMove)
+        }
+    }
+
     private func finishPendingMove() {
         // `agent.apiKey` is the Anthropic account and the one 0.3.8 wrote every key to.
         let source = LLMProviderConfiguration.Kind.anthropic.keychainAccount
@@ -76,7 +103,11 @@ public struct APIKeyMigration {
                     try store.delete(account: source)
                 }
             } else if try store.itemExists(account: source) {
-                try store.move(from: source, to: destination, label: Self.endpointLabel)
+                try store.move(
+                    from: source,
+                    to: destination,
+                    label: LLMProviderConfiguration.Kind.openAICompatible.keychainLabel
+                )
             }
             record(.settled)
         } catch {

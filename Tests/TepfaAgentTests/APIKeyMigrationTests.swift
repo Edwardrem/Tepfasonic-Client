@@ -11,11 +11,17 @@ struct APIKeyMigrationTests {
         var labels: [String: String] = [:]
         /// Makes the next move fail, as a locked or busy Keychain would.
         var failNextMove = false
+        /// Makes the next existence check fail, as a locked or busy Keychain would.
+        var failNextExists = false
         private(set) var moves = 0
         private(set) var deletions: [String] = []
 
         func itemExists(account: String) throws -> Bool {
-            items[account] != nil
+            if failNextExists {
+                failNextExists = false
+                throw FakeError.existsFailed
+            }
+            return items[account] != nil
         }
 
         func move(from source: String, to destination: String, label: String) throws {
@@ -39,6 +45,7 @@ struct APIKeyMigrationTests {
 
     private enum FakeError: Error {
         case moveFailed
+        case existsFailed
     }
 
     /// Every test gets its own defaults suite and removes it, so no decision leaks into the next run.
@@ -86,6 +93,47 @@ struct APIKeyMigrationTests {
         }
     }
 
+    // MARK: The first decision never guesses
+
+    @Test func aFirstDecisionWithABusyEndpointAccountSettlesWithoutTouchingEitherItem() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            // 0.3.8 never wrote the endpoint account, so a filled one means this version already ran;
+            // the item under agent.apiKey could be an Anthropic key and must not be deleted.
+            store.items[legacyAccount] = "anthropic-test-key"
+            store.items[endpointAccount] = "endpoint-test-key"
+            let migration = APIKeyMigration(store: store, defaults: defaults)
+
+            migration.run(legacyKind: .openAICompatible)
+
+            #expect(recordedState(defaults) == "settled")
+            #expect(store.items[legacyAccount] == "anthropic-test-key")
+            #expect(store.items[endpointAccount] == "endpoint-test-key")
+            #expect(store.moves == 0)
+            #expect(store.deletions.isEmpty)
+            #expect(migration.account(for: .anthropic) == legacyAccount)
+        }
+    }
+
+    @Test func aFirstDecisionThatCannotReadTheStoreStaysPendingAndTouchesNothing() {
+        withDefaults { defaults in
+            let store = FakeKeyStore()
+            store.items[legacyAccount] = "endpoint-test-key"
+            store.items[endpointAccount] = "another-test-key"
+            store.failNextExists = true
+            let migration = APIKeyMigration(store: store, defaults: defaults)
+
+            migration.run(legacyKind: .openAICompatible)
+
+            #expect(recordedState(defaults) == "pendingMove")
+            #expect(store.items[legacyAccount] == "endpoint-test-key")
+            #expect(store.items[endpointAccount] == "another-test-key")
+            #expect(store.moves == 0)
+            #expect(store.deletions.isEmpty)
+            #expect(migration.account(for: .anthropic) == nil)
+        }
+    }
+
     // MARK: Rule 2: Anthropic, or nothing saved, keeps the key
 
     @Test func oldAnthropicKeyStaysWithAnthropic() {
@@ -128,7 +176,7 @@ struct APIKeyMigrationTests {
 
             #expect(store.items[legacyAccount] == nil)
             #expect(store.items[endpointAccount] == "endpoint-test-key")
-            #expect(store.labels[endpointAccount] == APIKeyMigration.endpointLabel)
+            #expect(store.labels[endpointAccount] == LLMProviderConfiguration.Kind.openAICompatible.keychainLabel)
             #expect(recordedState(defaults) == "settled")
             #expect(migration.account(for: .anthropic) == legacyAccount)
             #expect(migration.account(for: .openAICompatible) == endpointAccount)
@@ -189,6 +237,7 @@ struct APIKeyMigrationTests {
             store.items[legacyAccount] = "old-endpoint-test-key"
             store.failNextMove = true
             let migration = APIKeyMigration(store: store, defaults: defaults)
+            // An earlier launch left the move pending; only that recorded state allows the delete below.
             migration.run(legacyKind: .openAICompatible)
             #expect(recordedState(defaults) == "pendingMove")
 
@@ -247,6 +296,10 @@ struct APIKeyMigrationTests {
             #expect(migration.account(for: .openAICompatible) == SecretAccount.openAICompatibleAPIKey)
             #expect(migration.account(for: .caimex) == SecretAccount.caimexAPIKey)
             #expect(Set([SecretAccount.agentAPIKey, SecretAccount.openAICompatibleAPIKey, SecretAccount.caimexAPIKey]).count == 3)
+
+            #expect(LLMProviderConfiguration.Kind.anthropic.keychainLabel == "Tepfasonic Claude API key")
+            #expect(LLMProviderConfiguration.Kind.openAICompatible.keychainLabel == "Tepfasonic endpoint API key")
+            #expect(LLMProviderConfiguration.Kind.caimex.keychainLabel == "Tepfasonic Caimex API key")
         }
     }
 }

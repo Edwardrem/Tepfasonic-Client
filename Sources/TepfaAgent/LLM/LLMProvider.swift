@@ -220,4 +220,14 @@ extension LLMProviderConfiguration.Kind {
         case .openAICompatible: SecretAccount.openAICompatibleAPIKey
         }
     }
+
+    /// The Keychain label a key is saved with. Anthropic's is the label the app has always used, so
+    /// upgrading cannot make a saved item look like a different one.
+    public var keychainLabel: String {
+        switch self {
+        case .anthropic: "Tepfasonic Claude API key"
+        case .caimex: "Tepfasonic Caimex API key"
+        case .openAICompatible: "Tepfasonic endpoint API key"
+        }
+    }
 }
